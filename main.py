@@ -35,7 +35,8 @@ data = data.groupby([data.index, 'StoreRegionNbr', 'nuts3_code']).agg({
     'QuantityCE': 'mean', 'SalesGoodsExclDiscountEUR': 'mean', 'SalesGoodsEUR': 'mean', 'NbrOfTransactions': 'mean',
     'WVO': 'mean', 'SchoolHolidayMiddle': 'mean', 'SchoolHolidayNorth': 'mean', 'SchoolHolidaySouth': 'mean',
     'TempMin': 'mean', 'TempMax': 'mean', 'TempAvg': 'mean', 'RainFallSum': 'mean', 'SundurationSum': 'mean',
-    '0-25_nbrpromos_index_201801': 'mean', '50-75_nbrpromos_index_201801': 'mean', 'StringencyIndex': 'mean'})
+    '0-25_nbrpromos_index_201801': 'mean', '25-50_nbrpromos_index_201801': 'mean',
+    '50-75_nbrpromos_index_201801': 'mean', 'StringencyIndex': 'mean'})
 data['Region'] = data.index.get_level_values('nuts3_code') + '_' + data.index.get_level_values('StoreRegionNbr').map(str)
 data = data.reset_index(level=(1, 2), drop=True)
 # number_of_regions = data['Region'].nunique()
