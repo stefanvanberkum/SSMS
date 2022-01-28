@@ -8,7 +8,7 @@ from datetime import date
 import pandas as pd
 
 
-def load_data(filepath):
+def load_data(filepath: str):
     """
     Load the required data.
 
@@ -60,10 +60,12 @@ def load_data(filepath):
     # data_groot_rijnmond.reset_index().plot.scatter(x='StringencyIndex', y='SalesGoodsEUR')
     # plt.show()
 
+    # Drop incomplete time series.
+    data = data[~data['Region'].isin(['NL332_330', 'NL327_330', 'NL212_509', 'NL423_340'])]
     return data
 
 
-def load_transaction(filepath):
+def load_transaction(filepath: str):
     """
     Loads the supermarket transaction data.
 
@@ -83,7 +85,7 @@ def load_transaction(filepath):
     return transaction_data
 
 
-def load_turnover(filepath):
+def load_turnover(filepath: str):
     """
     Loads the turnover data.
 
@@ -145,7 +147,7 @@ def load_turnover(filepath):
     return supermarket_data, hospitality_data
 
 
-def load_tracker(filepath):
+def load_tracker(filepath: str):
     """
     Loads the tracker data.
 
