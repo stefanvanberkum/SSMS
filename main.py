@@ -12,8 +12,10 @@ def main():
     data_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'data')
 
     data = load_data(data_path)
-    x_names = ['WVO', 'TempAvg', 'StringencyIndex']
-    endog = construct_arrays(data, group_name='Region', y_name='SalesGoodsEUR', x_names=x_names)
+    z_names = ['WVO', 'TempAvg']
+    c_names = ['StringencyIndex']
+    endog, exog, c = construct_arrays(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names,
+                                      c_names=c_names)
     print()
 
 

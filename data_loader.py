@@ -39,7 +39,8 @@ def load_data(filepath: str):
     # StringencyIndex, Turnover_hospitality, and Turnover_supermarket are not region specific (only time dependent).
     # data = data.groupby([data.index, 'StoreRegionNbr', 'nuts3_code']).agg({
     #    'StoreRegionNbr': 'first', 'StoreRegionName': 'first', 'corop_name': 'first', 'nuts3_code': 'first',
-    #    'QuantityCE': 'mean', 'SalesGoodsExclDiscountEUR': 'mean', 'SalesGoodsEUR': 'mean', 'NbrOfTransactions': 'mean',
+    #    'QuantityCE': 'mean', 'SalesGoodsExclDiscountEUR': 'mean', 'SalesGoodsEUR': 'mean', 'NbrOfTransactions':
+    #    'mean',
     #    'WVO': 'mean', 'SchoolHolidayMiddle': 'mean', 'SchoolHolidayNorth': 'mean', 'SchoolHolidaySouth': 'mean',
     #    'TempMin': 'mean', 'TempMax': 'mean', 'TempAvg': 'mean', 'RainFallSum': 'mean', 'SundurationSum': 'mean',
     #    '0-25_nbrpromos_index_201801': 'mean', '25-50_nbrpromos_index_201801': 'mean',
@@ -80,6 +81,8 @@ def load_transaction(filepath: str):
     transaction_data = transaction_data[(transaction_data['StoreRegionNbr'] != 610)
                                         & (transaction_data['StoreRegionNbr'] != 620)
                                         & (transaction_data['StoreRegionNbr'] != 630)]
+
+    # Index by week of the year.
     transaction_data['WeekKey'] = transaction_data['WeekKey'].astype(str)
     transaction_data = transaction_data.set_index('WeekKey')
     return transaction_data
@@ -122,7 +125,7 @@ def load_turnover(filepath: str):
 
     # Change quarterly data into weekly data by repeating the index.
     hospitality_data = hospitality_data.resample('W', convention='start').ffill()
-    hospitality_data.index = hospitality_data.index.strftime('%Y%W')
+    hospitality_data.index = hospitality_data.index.strftime('%G%V')
 
     # Process supermarket turnover data.
     supermarket_data = pd.read_excel(turnover_data, 'turnover_supermarkets_monthly')
@@ -143,7 +146,7 @@ def load_turnover(filepath: str):
 
     # Change monthly data into weekly data by repeating the index.
     supermarket_data = supermarket_data.resample('W', convention='start').ffill()
-    supermarket_data.index = supermarket_data.index.strftime('%Y%W')
+    supermarket_data.index = supermarket_data.index.strftime('%G%V')
     return supermarket_data, hospitality_data
 
 
@@ -171,5 +174,5 @@ def load_tracker(filepath: str):
                                                 'GovernmentResponseIndex': 'mean',
                                                 'ContainmentHealthIndex': 'mean',
                                                 'EconomicSupportIndex': 'mean'})
-    tracker_weekly.index = pd.to_datetime(tracker_weekly.index, format='%Y-%m-%d').strftime('%Y%W')
+    tracker_weekly.index = pd.to_datetime(tracker_weekly.index, format='%Y-%m-%d').strftime('%G%V')
     return tracker_weekly

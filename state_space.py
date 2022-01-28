@@ -32,20 +32,22 @@ class SSMS(sm.tsa.statespace.MLEModel):
         self.ssm["design"] = np.zeros((self.k_endog, self.k_states, self.nobs))
 
 
-def construct_arrays(data: pd.DataFrame, group_name: str, y_name: str, x_names: list):
+def construct_arrays(data: pd.DataFrame, group_name: str, y_name: str, z_names: list, c_names: list):
     """
     Constructs arrays of endogenous (y) and exogenous (x) variables.
 
     :param data: a dataframe
     :param group_name: the column name of the grouping variable for each time series (e.g., region)
     :param y_name: the column name of the dependent variable
-    :param x_names: a list of column names of the independent variables
-    :return: a tuple (endog, exog), with endog TxN array of y values (T periods, N observed time series) and exog Tx(
-    N*K) array of x values (T periods, N*K regressors) of the form [x_11, x_12, ..., x_1N, x_21, ..., x_KN]
+    :param z_names: a list of column names of the independent variables to be placed in the Z (design) matrix
+    :param c_names: a list of column names of the independent variables to be placed in the c (state intercept) matrix
+    :return: a tuple (endog, exog, c), with endog TxN array of y values (T periods, N observed time series), exog Tx(
+    N*K) array of x values (T periods, N*K regressors) of the form [x_11, x_12, ..., x_1N, x_21, ..., x_KN],
+    and c TxC array of x values that are constant across observations (but vary over time).
     """
 
     # Filter data (drop all unnecessary columns).
-    names = [group_name, y_name] + x_names
+    names = [group_name, y_name] + z_names + c_names
     data_select = data[names]
 
     # Group filtered data by user-specified group name (e.g., region) and collect in a list.
@@ -54,12 +56,17 @@ def construct_arrays(data: pd.DataFrame, group_name: str, y_name: str, x_names: 
 
     # Collect grouped y and x values in a list.
     y_group = [group[y_name].to_numpy() for group in group_list]
-    x_groups = [[group[x_name].to_numpy() for group in group_list] for x_name in x_names]
+    z_groups = [[group[z_name].to_numpy() for group in group_list] for z_name in z_names]
 
     # Construct TxN array of y values (T periods, N observed time series).
     endog = np.c_[tuple(y_group)]
 
     # Construct Tx(N*K) array of x values (T periods, N*K regressors) -> [x_11, x_12, ..., x_1N, x_21, ..., x_KN].
-    exog = np.c_[tuple([np.c_[tuple(x_group)] for x_group in x_groups])]
+    exog = np.c_[tuple([np.c_[tuple(z_group)] for z_group in z_groups])]
 
-    return endog, exog
+    # Construct TxC array of x values that are constant across observations (but vary over time).
+    c_groups = [[group[c_name].to_numpy() for group in group_list] for c_name in c_names]
+    c = np.c_[tuple([group for group in group_list[0][c_names]])]
+    print()
+
+    return endog, exog, c
