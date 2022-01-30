@@ -5,6 +5,7 @@ This module provides functions for loading and formatting the data.
 import os
 from datetime import date
 
+import numpy as np
 import pandas as pd
 
 
@@ -85,6 +86,13 @@ def load_transaction(filepath: str):
     # Index by week of the year.
     transaction_data['WeekKey'] = transaction_data['WeekKey'].astype(str)
     transaction_data = transaction_data.set_index('WeekKey')
+
+    # Take logs of SalesGoodsEUR, WVO, 0-25_nbrpromos_index_201801, 25-50_nbrpromos_index_201801, and
+    # 50-75_nbrpromos_index_201801.
+    to_log = ['SalesGoodsEUR', 'WVO', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
+              '50-75_nbrpromos_index_201801']
+    for col in to_log:
+        transaction_data[col] = np.log(transaction_data[col])
     return transaction_data
 
 

@@ -66,12 +66,14 @@ class SSMS(sm.tsa.statespace.MLEModel):
         :return: starting values
         """
 
+        # TODO: different for different types
+
         n = np.size(self.endog, 1)
         k = round(self.k_states / n) - 1
         c_k = np.size(self.exog, axis=1)
 
         # Number of parameters: k_states + k_states * (c_k + 1).
-        param_start = np.zeros(self.k_states * (c_k + 2))
+        param_start = np.ones(self.k_states * (c_k + 2)) * 0.5
 
         # Number of covariances: n^2 + n^2 * (k + 1).
         cov_start = np.ones((n ** 2) * (k + 2))
@@ -136,20 +138,31 @@ class SSMS(sm.tsa.statespace.MLEModel):
             self["state_intercept", state, :] = col
 
         # Set H_t = H and allow for off-diagonal elements (correlation between time series).
-        index_from = index_to
-        index_to += n ** 2
-        self["obs_cov"] = np.reshape(params[index_from:index_to], (n, n))
+        self["obs_cov"] = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i, n):
+                index_from = index_to
+                index_to += 1
+                self["obs_cov", i, j] = params[index_from]
+
+                if i != j:
+                    self["obs_cov", j, i] = params[index_from]
 
         # Set Q_t = Q.
         if self.cov_type == 'F':
             # Allow for off-diagonal elements (correlation between time series).
             self["state_cov"] = np.zeros((self.k_states, self.k_states))
             for state in range(k + 1):
-                index_from = index_to
-                index_to += n ** 2
                 cov_from = state * n
                 cov_to = (state + 1) * n
-                self["state_cov", cov_from:cov_to, cov_from:cov_to] = np.reshape(params[index_from:index_to], (n, n))
+                for i in range(cov_from, cov_to):
+                    for j in range(i, cov_to):
+                        index_from = index_to
+                        index_to += 1
+                        self["state_cov", i, j] = params[index_from]
+
+                        if i != j:
+                            self["state_cov", j, i] = params[index_from]
         elif self.cov_type == 'RSC':
             # Allow for off-diagonal elements, but restrict them to be the same across time-series.
             self["state_cov"] = np.zeros((self.k_states, self.k_states))

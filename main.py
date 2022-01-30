@@ -20,7 +20,7 @@ def main():
     data = load_data(data_path)
     test_data = data[data['Region'].isin(['NL310_503', 'NL329_502'])]
 
-    z_names = ['WVO', 'TempAvg']
+    z_names = ['WVO', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801', '50-75_nbrpromos_index_201801']
     c_names = ['StringencyIndex']
     model = SSMS(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
                  cov_type='RSC')
