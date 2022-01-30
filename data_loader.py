@@ -78,9 +78,9 @@ def load_transaction(filepath: str):
     transaction_data = pd.read_csv(os.path.join(filepath, 'transaction_data.csv'))
 
     # AH data for Belgium is dropped for now.
-    transaction_data = transaction_data[(transaction_data['StoreRegionNbr'] != 610)
-                                        & (transaction_data['StoreRegionNbr'] != 620)
-                                        & (transaction_data['StoreRegionNbr'] != 630)]
+    transaction_data = transaction_data[
+        (transaction_data['StoreRegionNbr'] != 610) & (transaction_data['StoreRegionNbr'] != 620) & (
+                transaction_data['StoreRegionNbr'] != 630)]
 
     # Index by week of the year.
     transaction_data['WeekKey'] = transaction_data['WeekKey'].astype(str)
@@ -170,9 +170,8 @@ def load_tracker(filepath: str):
     tracker = tracker.reindex(pd.date_range(date(2018, 1, 1), tracker.index[-1]), fill_value=0)
 
     # Change daily data into weekly data by taking the mean.
-    tracker_weekly = tracker.resample('W').agg({'StringencyIndex': 'mean',
-                                                'GovernmentResponseIndex': 'mean',
-                                                'ContainmentHealthIndex': 'mean',
-                                                'EconomicSupportIndex': 'mean'})
+    tracker_weekly = tracker.resample('W').agg(
+        {'StringencyIndex': 'mean', 'GovernmentResponseIndex': 'mean', 'ContainmentHealthIndex': 'mean',
+         'EconomicSupportIndex': 'mean'})
     tracker_weekly.index = pd.to_datetime(tracker_weekly.index, format='%Y-%m-%d').strftime('%G%V')
     return tracker_weekly
