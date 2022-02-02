@@ -2,6 +2,8 @@
 This module provides the state-space model functionality.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -21,7 +23,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
             matrix
         :param cov_type: model type, one of {'F': full model, 'RSC': restricted state covariance (same correlation
             across time series), 'IDS': independently distributed states (not implemented), 'GSC': grouped state
-            covariances ( not implemented)}
+            covariances (not implemented)}
         """
 
         # Construct arrays of endogenous (y) and exogenous (x) variables.
@@ -58,26 +60,64 @@ class SSMS(sm.tsa.statespace.MLEModel):
         # Placeholder for T_t.
         self.ssm["transition"] = np.eye(self.k_states)
 
+        # Placeholder for c_t.
+        self.ssm["state_intercept"] = np.zeros((self.k_states, self.nobs))
+
+        # Placeholder for H_t.
+        self["obs_cov"] = np.zeros((n, n))
+
+        # Placeholder for Q_t.
+        self["state_cov"] = np.zeros((self.k_states, self.k_states))
+
     @property
     def start_params(self):
         """
-        Set starting values (diffuse).
+        Set starting values (diffuse). Initializes all tau by one, and all nu and lambda by zero (random walk). All
+        variances are initialized by one, and covariances by zero.
 
         :return: starting values
         """
-
-        # TODO: different for different types
 
         n = np.size(self.endog, 1)
         k = round(self.k_states / n) - 1
         c_k = np.size(self.exog, axis=1)
 
-        # Number of parameters: k_states + k_states * (c_k + 1).
-        param_start = np.ones(self.k_states * (c_k + 2)) * 0.5
+        # Number of tau: k_states.
+        tau_start = np.ones(self.k_states)
 
-        # Number of covariances: n^2 + n^2 * (k + 1).
-        cov_start = np.ones((n ** 2) * (k + 2))
-        return np.concatenate((param_start, cov_start))
+        # Number of nu and lambda: k_states * (c_k + 1).
+        other_start = np.zeros(self.k_states * (c_k + 1))
+
+        if self.cov_type == 'F':
+            # Full covariance matrix for y and all states.
+            # Number of covariances: (n + C(n, 2)) + (k + 1) * (n + C(n, 2)).
+            cov_start = np.zeros((k + 2) * (n + math.comb(n, 2)))
+
+            # Set variances to one.
+            var_to = 0
+            for i in range(self.k_states + 1):
+                for row in range(n):
+                    var_from = var_to
+                    var_to += n - row
+                    cov_start[var_from] = 1
+        elif self.cov_type == 'RSC':
+            # Full covariance matrix for y.
+            # For each state covariance, n variances, one covariance.
+            # Number of covariances: (n + C(n, 2)) + (k + 1) * (n + 1).
+            cov_start = np.zeros((n + math.comb(n, 2)) + (k + 1) * (n + 1))
+
+            # Set variances to one.
+            var_to = 0
+            for row in range(n):
+                var_from = var_to
+                var_to += n - row
+                cov_start[var_from] = 1
+
+            for i in range(self.k_states):
+                var_from = var_to
+                var_to += n + 1
+                cov_start[var_from:var_from + n] = 1
+        return np.concatenate((tau_start, other_start, cov_start))
 
     def transform_params(self, unconstrained):
         """
@@ -127,18 +167,16 @@ class SSMS(sm.tsa.statespace.MLEModel):
         self["transition"] = np.diag(params[index_from:index_to])
 
         # Set c_t.
-        self["state_intercept"] = np.zeros((self.k_states, self.nobs))
         for state in range(self.k_states):
             index_from = index_to
             index_to += k_c + 1
             col = params[index_from]
 
             for x in range(k_c):
-                col += params[index_from + 1] * self.exog[:, x]
+                col += params[index_from + x + 1] * self.exog[:, x]
             self["state_intercept", state, :] = col
 
         # Set H_t = H and allow for off-diagonal elements (correlation between time series).
-        self["obs_cov"] = np.zeros((n, n))
         for i in range(n):
             for j in range(i, n):
                 index_from = index_to
@@ -151,7 +189,6 @@ class SSMS(sm.tsa.statespace.MLEModel):
         # Set Q_t = Q.
         if self.cov_type == 'F':
             # Allow for off-diagonal elements (correlation between time series).
-            self["state_cov"] = np.zeros((self.k_states, self.k_states))
             for state in range(k + 1):
                 cov_from = state * n
                 cov_to = (state + 1) * n
@@ -165,7 +202,6 @@ class SSMS(sm.tsa.statespace.MLEModel):
                             self["state_cov", j, i] = params[index_from]
         elif self.cov_type == 'RSC':
             # Allow for off-diagonal elements, but restrict them to be the same across time-series.
-            self["state_cov"] = np.zeros((self.k_states, self.k_states))
             for state in range(k + 1):
                 index_from = index_to
                 index_to += n + 1
