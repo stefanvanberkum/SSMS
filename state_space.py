@@ -95,7 +95,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
 
             # Set variances to one.
             var_to = 0
-            for i in range(self.k_states + 1):
+            for i in range(k + 2):
                 for row in range(n):
                     var_from = var_to
                     var_to += n - row
@@ -113,7 +113,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
                 var_to += n - row
                 cov_start[var_from] = 1
 
-            for i in range(self.k_states):
+            for i in range(k + 1):
                 var_from = var_to
                 var_to += n + 1
                 cov_start[var_from:var_from + n] = 1
