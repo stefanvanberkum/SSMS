@@ -11,7 +11,7 @@ import statsmodels.api as sm
 
 class SSMS(sm.tsa.statespace.MLEModel):
     def __init__(self, data: pd.DataFrame, group_name: str, y_name: str, z_names: list, c_names: list, llt: bool,
-                 param_rest: str, cov_rest: str, tau_start: float, var_start: float, cov_start: float):
+                 alt: bool, param_rest: str, cov_rest: str, tau_start: float, var_start: float, cov_start: float):
         """
         Constructs a state space model for sales.
 
@@ -23,6 +23,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
         :param c_names: a list of column names of the independent variables that have an indirect effect through the
             state equations (to be placed in the c/state intercept matrix)
         :param llt: true if local linear trend should be included
+        :param alt: true if a tau parameter is to be included
         :param param_rest: parameter restriction, one of {'F': full model, 'RSI': restricted state intercept (same
             effect across regions for independent variables in the state equations), 'RC': restricted coefficients (
             same effect across regions for independent variables in the sales equation), 'NSC': non-stochastic
@@ -45,6 +46,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
         k = self.k
 
         self.llt = llt
+        self.alt = alt
         self.param_rest = param_rest
         self.cov_rest = cov_rest
         self.tau_start = tau_start
@@ -131,8 +133,12 @@ class SSMS(sm.tsa.statespace.MLEModel):
         k = self.k
         c_k = np.size(self.exog, axis=1)
 
-        # Number of tau: k + 1.
-        tau_start = np.ones(k + 1) * self.tau_start
+        if self.llt and self.alt:
+            # Number of tau: k + 2.
+            tau_start = np.ones(k + 2) * self.tau_start
+        else:
+            # Number of tau: k + 1.
+            tau_start = np.ones(k + 1) * self.tau_start
 
         if self.llt:
             if self.param_rest == 'RSI':
@@ -275,12 +281,16 @@ class SSMS(sm.tsa.statespace.MLEModel):
 
         # Force covariances to be positive.
         if self.llt:
+            if self.alt:
+                n_tau = k + 2
+            else:
+                n_tau = k + 1
             if self.param_rest == 'RSI':
                 # Number of nu and lambda: (k_states - n) + (n + k) * c_k - n.
-                n_params = (k + 1) + (self.k_states - n) + (n + k) * c_k - n
+                n_params = n_tau + (self.k_states - n) + (n + k) * c_k - n
             else:
                 # Number of nu and lambda: (k_states - n) * (c_k + 1) - n.
-                n_params = (k + 1) + (self.k_states - n) * (c_k + 1) - n
+                n_params = n_tau + (self.k_states - n) * (c_k + 1) - n
         else:
             if self.param_rest == 'RSI':
                 # Number of nu and lambda: k_states + (n + k) * c_k.
@@ -306,12 +316,16 @@ class SSMS(sm.tsa.statespace.MLEModel):
 
         # Force covariances to be positive.
         if self.llt:
+            if self.alt:
+                n_tau = k + 2
+            else:
+                n_tau = k + 1
             if self.param_rest == 'RSI':
                 # Number of nu and lambda: (k_states - n) + (n + k) * c_k - n.
-                n_params = (k + 1) + (self.k_states - n) + (n + k) * c_k - n
+                n_params = n_tau + (self.k_states - n) + (n + k) * c_k - n
             else:
                 # Number of nu and lambda: (k_states - n) * (c_k + 1) - n.
-                n_params = (k + 1) + (self.k_states - n) * (c_k + 1) - n
+                n_params = n_tau + (self.k_states - n) * (c_k + 1) - n
         else:
             if self.param_rest == 'RSI':
                 # Number of nu and lambda: k_states + (n + k) * c_k.
@@ -338,25 +352,44 @@ class SSMS(sm.tsa.statespace.MLEModel):
 
         # Set T_t = T.
         index_from = 0
-        index_to = k + 1
+
+        if self.alt:
+            index_to = k + 2
+        else:
+            index_to = k + 1
 
         if self.param_rest == 'RC':
             if self.llt:
-                # RC-LLT.
-                tau1_vec = np.ones(n) * params[index_from]
-                mat = np.diag(np.concatenate((tau1_vec, np.ones(n), params[index_from + 1:index_to])))
-                mat[:n, n:2 * n] = np.eye(n)
+                if self.alt:
+                    # RC-LLT-alt.
+                    tau1_vec = np.ones(n) * params[index_from]
+                    tau2_vec = np.ones(n) * params[index_from + 1]
+                    mat = np.diag(np.concatenate((tau1_vec, tau2_vec, params[index_from + 2:index_to])))
+                    mat[:n, n:2 * n] = np.eye(n)
+                else:
+                    # RC-LLT.
+                    tau1_vec = np.ones(n) * params[index_from]
+                    mat = np.diag(np.concatenate((tau1_vec, np.ones(n), params[index_from + 1:index_to])))
+                    mat[:n, n:2 * n] = np.eye(n)
             else:
                 # RC.
                 tau1_vec = np.ones(n) * params[index_from]
                 mat = np.diag(np.concatenate((tau1_vec, params[index_from + 1:index_to])))
         else:
             if self.llt:
-                # F/RSI-LLT.
-                tau1_vec = np.ones(n) * params[index_from]
-                tau2_vec = np.concatenate([np.ones(n) * param for param in params[index_from + 1:index_to]])
-                mat = np.diag(np.concatenate((tau1_vec, np.ones(n), tau2_vec)))
-                mat[:n, n:2 * n] = np.eye(n)
+                if self.alt:
+                    # F/RSI-LLT-alt.
+                    tau1_vec = np.ones(n) * params[index_from]
+                    tau2_vec = np.ones(n) * params[index_from + 1]
+                    tau3_vec = np.concatenate([np.ones(n) * param for param in params[index_from + 2:index_to]])
+                    mat = np.diag(np.concatenate((tau1_vec, tau2_vec, tau3_vec)))
+                    mat[:n, n:2 * n] = np.eye(n)
+                else:
+                    # F/RSI-LLT.
+                    tau1_vec = np.ones(n) * params[index_from]
+                    tau2_vec = np.concatenate([np.ones(n) * param for param in params[index_from + 1:index_to]])
+                    mat = np.diag(np.concatenate((tau1_vec, np.ones(n), tau2_vec)))
+                    mat[:n, n:2 * n] = np.eye(n)
             else:
                 # F/RSI.
                 param_vec = np.concatenate([np.ones(n) * param for param in params[index_from:index_to]])
