@@ -26,10 +26,14 @@ def load_data(filepath: str):
     # Load tracker data.
     tracker_weekly = load_tracker(filepath)
 
-    # Merge transaction, turnover, and tracker data.
+    # Load temperature data.
+    temperature_data = load_temperature(filepath)
+
+    # Merge transaction, turnover, tracker and temperature data.
     data = transaction_data.merge(hospitality_data, left_index=True, right_index=True, how='left')
     data = data.merge(supermarket_data, left_index=True, right_index=True, how='left')
     data = data.merge(tracker_weekly, left_index=True, right_index=True, how='left')
+    data = data.merge(temperature_data, left_index=True, right_index=True, how='left')
 
     # In this case, all regions are unique, for other partitions aggregation is required.
     data.index.name = 'YearWeek'
@@ -83,6 +87,21 @@ def load_transaction(filepath: str):
         (transaction_data['StoreRegionNbr'] != 610) & (transaction_data['StoreRegionNbr'] != 620) & (
                 transaction_data['StoreRegionNbr'] != 630)]
 
+    # Transform SchoolHolidayNorth, SchoolHolidayMiddle, SchoolHolidaySouth into 1 variable
+    # This needs to happen before the index changes, otherwise the rows become indistinguishable
+    nuts3_north = {'NL111', 'NL112', 'NL113', 'NL124', 'NL125', 'NL126', 'NL131', 'NL132', 'NL133', 'NL211', 'NL212',
+                   'NL213', 'NL230', 'NL321', 'NL323', 'NL324', 'NL325', 'NL327', 'NL328', 'NL329'}
+    nuts3_middle = {'NL225', 'NL221', 'NL224', 'NL310', 'NL332', 'NL333', 'NL337', 'NL33A', 'NL33B', 'NL33C'}
+    nuts3_south = {'NL226', 'NL341', 'NL342', 'NL411', 'NL412', 'NL413', 'NL414', 'NL421', 'NL422', 'NL423'}
+    transaction_data['SchoolHoliday'] = 0
+    for index, row in transaction_data.iterrows():
+        if row['nuts3_code'] in nuts3_north and row['SchoolHolidayNorth'] == 1:
+            transaction_data.loc[index, 'SchoolHoliday'] = 1
+        if row['nuts3_code'] in nuts3_middle and row['SchoolHolidayMiddle'] == 1:
+            transaction_data.loc[index, 'SchoolHoliday'] = 1
+        if row['nuts3_code'] in nuts3_south and row['SchoolHolidaySouth'] == 1:
+            transaction_data.loc[index, 'SchoolHoliday'] = 1
+
     # Index by week of the year.
     transaction_data['WeekKey'] = transaction_data['WeekKey'].astype(str)
     transaction_data = transaction_data.set_index('WeekKey')
@@ -110,11 +129,11 @@ def load_turnover(filepath: str):
     # Process hospitality turnover data.
     hospitality_data = pd.read_excel(turnover_data, 'turnover_horeca_quarterly')
 
-    # 2021Q4 is added to the last row, to upsample till first day of Q4 instead of first day of Q3
-    # hospitality_data.iloc[-1, hospitality_data.columns.get_loc('Perioden')] = '2021 4e kwartaal*'
-
     # Remove last line (source disclaimer).
     hospitality_data = hospitality_data.iloc[:-1, :]
+
+    # 2021Q4 is added to the last row, to upsample till first day of Q4 instead of first day of Q3
+    hospitality_data.iloc[-1, hospitality_data.columns.get_loc('Perioden')] = '2021 4e kwartaal*'
 
     # Index by datetime in format %Y%W.
     hospitality_data['Perioden'] = pd.to_datetime(
@@ -189,3 +208,52 @@ def load_tracker(filepath: str):
     # Manually set first difference of first period to zero (there was no lockdown before that time).
     tracker_weekly['StringencyIndexDiff'].iloc[0] = 0
     return tracker_weekly
+
+
+def load_temperature(filepath: str):
+    """
+    Loads the temperature data.
+
+    :param filepath: the location of the temperature file
+    :return: formatted data
+    """
+
+    # Load the temperature data.
+    temperature_data = pd.read_excel(os.path.join(filepath, '24_hour_average_temperature.xlsx'))
+
+    # Remove first 28 rows (information about data) and base header on 28th row without spaces/index label.
+    header = temperature_data.iloc[27].str.strip()
+    temperature_data = temperature_data[28:]
+    temperature_data.columns = header
+    temperature_data.columns.name = None
+
+    # Index by date and remove data before 2018-1-1
+    temperature_data['YYYYMMDD'] = pd.to_datetime(temperature_data['YYYYMMDD'], format='%Y%m%d')
+    temperature_data = temperature_data[temperature_data['YYYYMMDD'] < '2018-01-01']
+
+    # Transform temperature (TG) from string with spaces to numeric values (in 1.0 degrees Celsius).
+    temperature_data = temperature_data.set_index('YYYYMMDD')
+    temperature_data['TG'] = temperature_data['TG'].str.strip()
+    temperature_data['TG'] = pd.to_numeric(temperature_data['TG'])
+    temperature_data['TG'] = temperature_data['TG'].div(10)
+
+    # Group by index by taking the mean
+    temperature_data = temperature_data.groupby(temperature_data.index).mean()
+    temperature_data.index = temperature_data.index.strftime('%m%d')
+
+    # Group by day-month by taking the mean and remove leap day
+    temperature_data = temperature_data.groupby(temperature_data.index).mean()
+    temperature_data = temperature_data.drop('0229')
+
+    # Add day-month averages of KNMI to the years 2018-2021
+    old_temperature_data = temperature_data
+    temperature_data = temperature_data.set_index('2018' + old_temperature_data.index)
+    for i in range(3):
+        temperature_data = temperature_data.append(old_temperature_data.set_index(str(2018 + i + 1)
+                                                                                  + old_temperature_data.index))
+
+    # Downsample daily data into weekly data by taking the mean
+    temperature_data.index = pd.to_datetime(temperature_data.index, format='%Y%m%d')
+    temperature_data = temperature_data.resample('W').mean()
+    temperature_data.index = pd.to_datetime(temperature_data.index, format='%Y-%m-%d').strftime('%G%V')
+    return temperature_data
