@@ -30,8 +30,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
             coefficients (no stochastic element for coefficient of independent variables in the sales equation,
             not implemented)}
         :param cov_rest: covariance restriction, one of {'F': full model, 'RSC': restricted state covariance (same
-            correlation across time series), 'IDS': independently distributed states (not implemented), 'GSC': grouped
-            state covariances (not implemented)}
+            correlation across time series), 'IDS': independently distributed states}
         :param tau_start: starting value for state autocorrelation parameters
         :param var_start: starting value for variances
         :param cov_start: starting value for covariances
@@ -203,7 +202,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
                         var_from = var_to
                         var_to += n - row
                         cov_start[var_from] = self.var_start
-        else:
+        elif self.cov_rest == 'RSC':
             # Full covariance matrix for y.
             if self.param_rest == 'RC':
                 # For mu, n variances, one covariance.
@@ -264,6 +263,67 @@ class SSMS(sm.tsa.statespace.MLEModel):
                     var_from = var_to
                     var_to += n + 1
                     cov_start[var_from:var_from + n] = self.var_start
+        else:
+            # Full covariance matrix for y.
+            if self.param_rest == 'RC':
+                # For mu, n variances, no covariance.
+                # Only variances for the k states (not region-specific).
+                if self.llt:
+                    # For nu, n variances, no covariance.
+                    # Number of covariances: (n + C(n, 2)) + 2 * n + k
+                    cov_start = np.ones((n + math.comb(n, 2)) + 2 * n + k) * self.cov_start
+                else:
+                    # Number of covariances: (n + C(n, 2)) + n + k
+                    cov_start = np.ones((n + math.comb(n, 2)) + n + k) * self.cov_start
+
+                # Change variances for y.
+                var_to = 0
+                for row in range(n):
+                    var_from = var_to
+                    var_to += n - row
+                    cov_start[var_from] = self.var_start
+
+                # Change variances for mu.
+                var_from = var_to
+                var_to += n
+                cov_start[var_from:var_to] = self.var_start
+
+                if self.llt:
+                    # Change variances for nu.
+                    var_from = var_to
+                    var_to += n
+                    cov_start[var_from:var_to] = self.var_start
+
+                # Change variances for all states corresponding to independent variables.
+                for i in range(k):
+                    var_from = var_to
+                    var_to += 1
+                    cov_start[var_from] = self.var_start
+            else:
+                # For each state covariance, n variances, no covariance.
+                if self.llt:
+                    # Number of covariances: (n + C(n, 2)) + (k + 2) * n.
+                    cov_start = np.ones((n + math.comb(n, 2)) + (k + 2) * n) * self.cov_start
+                else:
+                    # Number of covariances: (n + C(n, 2)) + (k + 1) * n.
+                    cov_start = np.ones((n + math.comb(n, 2)) + (k + 1) * n) * self.cov_start
+
+                # Change variances for y.
+                var_to = 0
+                for row in range(n):
+                    var_from = var_to
+                    var_to += n - row
+                    cov_start[var_from] = self.var_start
+
+                # Change variances for all states.
+                if self.llt:
+                    other = 2
+                else:
+                    other = 1
+                for i in range(k + other):
+                    var_from = var_to
+                    var_to += n
+                    cov_start[var_from:var_to] = self.var_start
         return np.concatenate((tau_start, other_start, cov_start))
 
     def transform_params(self, unconstrained):
@@ -452,13 +512,10 @@ class SSMS(sm.tsa.statespace.MLEModel):
 
         # Set H_t = H and allow for off-diagonal elements (correlation between time series).
         for i in range(n):
-            for j in range(i, n):
-                index_from = index_to
-                index_to += 1
-                self["obs_cov", i, j] = params[index_from]
-
-                if i != j:
-                    self["obs_cov", j, i] = params[index_from]
+            index_from = index_to
+            index_to += n - i
+            self["obs_cov", i, i:n] = params[index_from:index_to]
+            self["obs_cov", i:n, i] = params[index_from:index_to]
 
         # Set Q_t = Q.
         if self.param_rest == 'RC':
@@ -488,14 +545,11 @@ class SSMS(sm.tsa.statespace.MLEModel):
                 cov_from = cov_to
                 cov_to += n
                 for i in range(cov_from, cov_to):
-                    for j in range(i, cov_to):
-                        index_from = index_to
-                        index_to += 1
-                        self["state_cov", i, j] = params[index_from]
-
-                        if i != j:
-                            self["state_cov", j, i] = params[index_from]
-        else:
+                    index_from = index_to
+                    index_to += cov_to - i
+                    self["state_cov", i, i:cov_to] = params[index_from:index_to]
+                    self["state_cov", i:cov_to, i] = params[index_from:index_to]
+        elif self.cov_rest == 'RSC':
             # Allow for off-diagonal elements, but restrict them to be the same across time-series.
             for block in range(blocks):
                 index_from = index_to
@@ -505,14 +559,22 @@ class SSMS(sm.tsa.statespace.MLEModel):
                 variances = np.diag(params[index_from:index_to - 1])
                 covariances = np.ones((n, n)) * params[index_to - 1] - np.diag(np.ones(n) * params[index_to - 1])
                 self["state_cov", cov_from:cov_to, cov_from:cov_to] = variances + covariances
+        else:
+            # Do not allow for off-diagonal elements (set to zero).
+            for block in range(blocks):
+                index_from = index_to
+                index_to += n
+                cov_from = cov_to
+                cov_to += n
+                variances = np.diag(params[index_from:index_to])
+                self["state_cov", cov_from:cov_to, cov_from:cov_to] = variances
 
         # Set solo variances.
-        for solo in range(solos):
-            index_from = index_to
-            index_to += 1
-            cov_from = cov_to
-            cov_to += 1
-            self["state_cov", cov_from, cov_from] = params[index_from]
+        index_from = index_to
+        index_to += solos
+        cov_from = cov_to
+        cov_to += solos
+        self["state_cov", cov_from:cov_to, cov_from:cov_to] = np.diag(params[index_from:index_to])
 
 
 def construct_arrays(data: pd.DataFrame, group_name: str, y_name: str, z_names: list, c_names: list):
