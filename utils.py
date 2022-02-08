@@ -8,9 +8,9 @@ from state_space import SSMS
 
 def print_params(results: MLEResults, save_path: str):
     """
-    Pretty-prints the parameters for an RC-LLT (RSC) type model.
+    Pretty-prints the parameters for an SSMS model.
 
-    :param results: results object for RC-LLT (RSC) type SSMS model
+    :param results: results object for an SSMS model
     :param save_path: path to save location
     :return:
     """
@@ -18,13 +18,15 @@ def print_params(results: MLEResults, save_path: str):
     if not isinstance(model, SSMS):
         print("Can't print parameters for a non-SSMS model.")
         return
-    if not model.llt or model.param_rest != 'RC' or model.cov_rest != 'RSC':
-        print("Can't print parameters for this model type, just for RC-LLT (RSC).")
-        return
 
     # Retrieve fitted parameters, z-statistics, and p-values.
+    regions = model.group_names
     params = results.params
     zvalues = results.zvalues
     pvalues = results.pvalues
+
+    if model.cov_rest == 'RC':
+        with open(save_path + 'params.csv', 'w') as out:
+            out.write()
 
     print(0)

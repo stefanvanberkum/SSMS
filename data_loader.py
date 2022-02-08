@@ -182,4 +182,10 @@ def load_tracker(filepath: str):
         {'StringencyIndex': 'mean', 'GovernmentResponseIndex': 'mean', 'ContainmentHealthIndex': 'mean',
          'EconomicSupportIndex': 'mean'})
     tracker_weekly.index = pd.to_datetime(tracker_weekly.index, format='%Y-%m-%d').strftime('%G%V')
+
+    # Get first difference of stringency index.
+    tracker_weekly['StringencyIndexDiff'] = tracker_weekly['StringencyIndex'].diff()
+
+    # Manually set first difference of first period to zero (there was no lockdown before that time).
+    tracker_weekly['StringencyIndexDiff'].iloc[0] = 0
     return tracker_weekly

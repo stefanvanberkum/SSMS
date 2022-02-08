@@ -10,6 +10,257 @@ import statsmodels.api as sm
 
 
 class SSMS(sm.tsa.statespace.MLEModel):
+    def __init__(self, data: pd.DataFrame, group_name: str, y_name: str, z_names: list, c_names: list, cov_rest: str,
+                 var_start: float, cov_start: float):
+        """
+        Constructs a state space model for sales.
+
+        :param data: a dataframe
+        :param group_name: the column name of the grouping variable for each time series (e.g., region)
+        :param y_name: the column name of the dependent variable
+        :param z_names: a list of column names of the independent variables that have a direct effect on sales (to be
+            placed in the Z/design matrix)
+        :param c_names: a list of column names of the independent variables that have an indirect effect through the
+            state equations (to be placed in the c/state intercept matrix)
+        :param cov_rest: covariance restriction, one of {'RC': restricted covariances (same correlation across time
+            series), 'IDO': restricted state covariances and independently distributed observations,
+            'IDE': independently distributed errors (for both observations and states)}
+        :param var_start: starting value for variances
+        :param cov_start: starting value for covariances
+        """
+
+        # Construct arrays of group names, and endogenous (y) and exogenous (x) variables.
+        group_names, y, x_z, x_c = construct_arrays(data, group_name, y_name, z_names, c_names)
+
+        n = np.size(y, 1)
+        nk = np.size(x_z, 1)
+        self.k = round(nk / n)
+        k = self.k
+
+        self.group_names = group_names
+        self.y_name = y_name
+        self.z_names = z_names
+        self.c_names = c_names
+        self.cov_rest = cov_rest
+        self.var_start = var_start
+        self.cov_start = cov_start
+
+        # Intialize the state-space model.
+        super(SSMS, self).__init__(endog=y, exog=x_c, k_states=2 * n + k, initialization='diffuse')
+
+        # First part of Z matrix is NxN identity matrix for mu.
+        z_mu = np.eye(n)
+
+        # Second part is NxN matrix of zeros for nu.
+        z_nu = np.zeros((n, n))
+
+        # Split x_z matrix into k distinct parts for each time period.
+        x_split = np.apply_along_axis(np.split, 1, x_z, indices_or_sections=k)
+
+        # Concatenate matrices to form [I_N, O_N, x[t, 1], x[t, 2], ..., x[t, k]].
+        x_concat = np.array([np.hstack((z_mu, z_nu, np.transpose(np.vstack(arr)))) for arr in x_split])
+
+        # Set Z_t.
+        self.ssm["design"] = np.zeros((self.k_endog, self.k_states, self.nobs))
+        for t in range(self.nobs):
+            self.ssm["design", :, :, t] = x_concat[t]
+
+        # Set R_t = I_(k_states).
+        self.ssm["selection"] = np.eye(self.k_states)
+
+        # Placeholder for T_t.
+        self.ssm["transition"] = np.eye(self.k_states)
+
+        # Placeholder for c_t.
+        self.ssm["state_intercept"] = np.zeros((self.k_states, self.nobs))
+
+        # Placeholder for H_t.
+        self["obs_cov"] = np.zeros((self.k_endog, self.k_endog))
+
+        # Placeholder for Q_t.
+        self["state_cov"] = np.zeros((self.k_states, self.k_states))
+
+    @property
+    def start_params(self):
+        """
+        Set starting values using user-specified starting values from when the SSMS object was created.
+
+        :return: starting values
+        """
+
+        n = self.k_endog
+        k = self.k
+        c_k = np.size(self.exog, axis=1)
+
+        # Number of lambda: (n + k) * c_k.
+        lambda_start = np.zeros((n + k) * c_k)
+
+        if self.cov_rest == 'RC':
+            # For y, mu, and nu, n variances, one covariance.
+            # Only variances for the other k states (not region-specific).
+            # Number of covariances: 3 * (n + 1) + k
+            cov_start = np.ones(3 * (n + 1) + k) * self.cov_start
+
+            # Change variances for y, mu, and nu.
+            var_to = 0
+            for i in range(3):
+                var_from = var_to
+                var_to += n + 1
+                cov_start[var_from:var_from + n] = self.var_start
+
+            # Change variances for all states corresponding to independent variables.
+            var_from = var_to
+            var_to += k
+            cov_start[var_from:var_to] = self.var_start
+        elif self.cov_rest == 'IDO':
+            # For y, n variances, no covariance.
+            # For mu and nu, n variances, one covariance.
+            # Only variances for the other k states (not region-specific).
+            # Number of covariances: n + 2 * (n + 1) + k
+            cov_start = np.ones(n + 2 * (n + 1) + k) * self.cov_start
+
+            # Change variances for y.
+            var_from = 0
+            var_to = n
+            cov_start[var_from:var_to] = self.var_start
+
+            # Change variances for mu and nu.
+            for i in range(2):
+                var_from = var_to
+                var_to += n + 1
+                cov_start[var_from:var_from + n] = self.var_start
+
+            # Change variances for all states corresponding to independent variables.
+            var_from = var_to
+            var_to += k
+            cov_start[var_from:var_to] = self.var_start
+        else:
+            # Only variances, no covariance.
+            # Number of covariances: 3 * n + k.
+            cov_start = np.ones(3 * n + k) * self.var_start
+        return np.concatenate((lambda_start, cov_start))
+
+    def transform_params(self, unconstrained):
+        """
+        Restrict covariances to be non-negative.
+
+        :param unconstrained: unconstrained parameters
+        :return: constrained parameters
+        """
+
+        n = self.k_endog
+        k = self.k
+        c_k = np.size(self.exog, axis=1)
+        constrained = unconstrained.copy()
+
+        # Force covariances to be positive.
+        n_params = (n + k) * c_k
+        constrained[n_params:] = unconstrained[n_params:] ** 2
+        return constrained
+
+    def untransform_params(self, constrained):
+        """
+        Reverses transform_params() transformation.
+
+        :param constrained: constrained parameters
+        :return: unconstrained parameters
+        """
+
+        n = self.k_endog
+        k = self.k
+        c_k = np.size(self.exog, axis=1)
+        unconstrained = constrained.copy()
+
+        # Force covariances to be positive.
+        n_params = (n + k) * c_k
+        unconstrained[n_params:] = constrained[n_params:] ** 0.5
+        return unconstrained
+
+    def update(self, params, **kwargs):
+        """
+        Defines how parameters enter the model.
+
+        :param params: array of parameters
+        :param kwargs: additional arguments
+        :return:
+        """
+        params = super(SSMS, self).update(params, **kwargs)
+
+        n = self.k_endog
+        k = self.k
+        k_c = np.size(self.exog, axis=1)
+
+        # Set T_t = T.
+        mat = np.diag(np.ones(self.k_states))
+        mat[:n, n:2 * n] = np.eye(n)
+        self["transition"] = mat
+
+        # Set c_t.
+        # Set intercept for mu.
+        index_to = 0
+        for obs in range(n):
+            index_from = index_to
+            index_to += k_c
+            col = 0
+
+            for x in range(k_c):
+                col += params[index_from + x] * self.exog[:, x]
+            self["state_intercept", obs, :] = col
+
+        # Skip over the nu.
+        start = 2 * n
+
+        # Set intercept for beta (nu and lambda).
+        for state in range(start, self.k_states):
+            index_from = index_to
+            index_to += k_c
+            col = 0
+
+            for x in range(k_c):
+                col += params[index_from + x] * self.exog[:, x]
+            self["state_intercept", state, :] = col
+
+        # Set H_t = H.
+        if self.cov_rest == 'RC':
+            # Allow for off-diagonal elements, but restrict them to be the same across time-series.
+            index_from = index_to
+            index_to += n + 1
+            variances = np.diag(params[index_from:index_to - 1])
+            covariances = np.ones((n, n)) * params[index_to - 1] - np.diag(np.ones(n) * params[index_to - 1])
+            self["obs_cov"] = variances + covariances
+        else:
+            # Do not allow for off-diagonal elements.
+            index_from = index_to
+            index_to += n
+            self["obs_cov"] = np.diag(params[index_from:index_to])
+
+        # Set Q_t = Q.
+        if self.cov_rest == 'IDE':
+            # Do not allow for mu and nu covariances.
+            index_from = index_to
+            index_to += self.k_states
+            self["state_cov"] = np.diag(params[index_from:])
+        else:
+            # Allow mu and nu covariances, but restrict them to be the same across time-series.
+            cov_to = 0
+            for block in range(2):
+                index_from = index_to
+                index_to += n + 1
+                cov_from = cov_to
+                cov_to += n
+                variances = np.diag(params[index_from:index_to - 1])
+                covariances = np.ones((n, n)) * params[index_to - 1] - np.diag(np.ones(n) * params[index_to - 1])
+                self["state_cov", cov_from:cov_to, cov_from:cov_to] = variances + covariances
+
+            # Set variances for the other k states.
+            index_from = index_to
+            index_to += k
+            cov_from = cov_to
+            cov_to += k
+            self["state_cov", cov_from:cov_to, cov_from:cov_to] = np.diag(params[index_from:index_to])
+
+
+class SSMS_old(sm.tsa.statespace.MLEModel):
     def __init__(self, data: pd.DataFrame, group_name: str, y_name: str, z_names: list, c_names: list, llt: bool,
                  alt: bool, param_rest: str, cov_rest: str, tau_start: float, var_start: float, cov_start: float):
         """
@@ -586,9 +837,10 @@ def construct_arrays(data: pd.DataFrame, group_name: str, y_name: str, z_names: 
     :param y_name: the column name of the dependent variable
     :param z_names: a list of column names of the independent variables to be placed in the Z (design) matrix
     :param c_names: a list of column names of the independent variables to be placed in the c (state intercept) matrix
-    :return: a tuple (y, x_z, x_c), with y TxN array of y values (T periods, N observed time series), x_z Tx(N*K) array
-        of x values (T periods, N*K regressors) of the form [x_11, x_12, ..., x_1N, x_21, ..., x_KN], and x_c TxC
-        array of x values that are constant across observations (but vary over time).
+    :return: a tuple (group_names, y, x_z, x_c), with group_names Nx1 array of group names, y TxN array of y values (
+        T periods, N observed time series), x_z Tx(N*K) array of x values (T periods, N*K regressors) of the form [x_11,
+        x_12, ..., x_1N, x_21, ..., x_KN], and x_c TxC array of x values that are constant across observations (but vary
+        over time).
     """
 
     # Filter data (drop all unnecessary columns).
@@ -597,6 +849,7 @@ def construct_arrays(data: pd.DataFrame, group_name: str, y_name: str, z_names: 
 
     # Group filtered data by user-specified group name (e.g., region) and collect in a list.
     grouped = data_select.groupby(group_name, sort=False)
+    group_names = [name for name, group in grouped]
     group_list = [group for name, group in grouped]
 
     # Collect grouped y and x values in a list.
@@ -615,4 +868,4 @@ def construct_arrays(data: pd.DataFrame, group_name: str, y_name: str, z_names: 
     # Construct TxC array of x values that are constant across observations (but vary over time).
     # We append all variables for an arbitrarily chosen group by column.
     x_c = np.transpose(np.array([x[0] for x in c_group]))
-    return y, x_z, x_c
+    return group_names, y, x_z, x_c
