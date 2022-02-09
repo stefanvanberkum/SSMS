@@ -68,6 +68,37 @@ def load_data(filepath: str):
 
     # Drop incomplete time series.
     data = data[~data['Region'].isin(['NL332_330', 'NL327_330', 'NL212_509', 'NL423_340'])]
+
+    # Drop time series that contain outliers.
+    grouped = data.groupby('Region', sort=False)
+    group_names = [name for name, group in grouped]
+    group_list = [group for name, group in grouped]
+
+    # Collect grouped y and x values in a list.
+    y_group = [group['SalesGoodsEUR'].to_numpy() for group in group_list]
+    n = len(y_group[0])
+    block = np.ceil(0.25 * n / 2).astype(int)
+
+    for obs in range(len(y_group)):
+        y = y_group[obs]
+
+        mu = np.zeros(n)
+        mu[0] = np.mean(y[1:block])
+        mu[n - 1] = np.mean(y[n - 1 - block:n - 1])
+        for i in range(1, n - 1):
+            if i < block:
+                mu[i] = np.mean(np.concatenate((y[:i], y[i + 1:i + 1 + block])))
+            elif i + 1 + block > n - 1:
+                mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:])))
+            else:
+                mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:i + 1 + block])))
+
+        sd = np.std(y)
+        if np.any(y > mu + 4 * sd) or np.any(y < mu - 4 * sd):
+            data = data[~data['Region'].isin([group_names[obs]])]
+
+    # Drop regions that cause trouble.
+    # data = data[~data['Region'].isin(['NL226_340', 'NL329_340', 'NL328_501', 'NL225_509'])]
     return data
 
 
@@ -227,7 +258,7 @@ def load_temperature(filepath: str):
     temperature_data.columns = header
     temperature_data.columns.name = None
 
-    # Index by date and remove data before 2018-1-1
+    # Index by date and remove data before 2018-1-1.
     temperature_data['YYYYMMDD'] = pd.to_datetime(temperature_data['YYYYMMDD'], format='%Y%m%d')
     temperature_data = temperature_data[temperature_data['YYYYMMDD'] < '2018-01-01']
 
@@ -237,23 +268,26 @@ def load_temperature(filepath: str):
     temperature_data['TG'] = pd.to_numeric(temperature_data['TG'])
     temperature_data['TG'] = temperature_data['TG'].div(10)
 
-    # Group by index by taking the mean
+    # Group by index by taking the mean.
     temperature_data = temperature_data.groupby(temperature_data.index).mean()
     temperature_data.index = temperature_data.index.strftime('%m%d')
 
-    # Group by day-month by taking the mean and remove leap day
+    # Group by day-month by taking the mean and remove leap day.
     temperature_data = temperature_data.groupby(temperature_data.index).mean()
     temperature_data = temperature_data.drop('0229')
 
-    # Add day-month averages of KNMI to the years 2018-2021
+    # Add day-month averages of KNMI to the years 2018-2021.
     old_temperature_data = temperature_data
     temperature_data = temperature_data.set_index('2018' + old_temperature_data.index)
     for i in range(3):
-        temperature_data = temperature_data.append(old_temperature_data.set_index(str(2018 + i + 1)
-                                                                                  + old_temperature_data.index))
+        temperature_data = temperature_data.append(
+            old_temperature_data.set_index(str(2018 + i + 1) + old_temperature_data.index))
 
-    # Downsample daily data into weekly data by taking the mean
+    # Downsample daily data into weekly data by taking the mean.
     temperature_data.index = pd.to_datetime(temperature_data.index, format='%Y%m%d')
     temperature_data = temperature_data.resample('W').mean()
     temperature_data.index = pd.to_datetime(temperature_data.index, format='%Y-%m-%d').strftime('%G%V')
+
+    # Take log.
+    temperature_data = np.log(temperature_data)
     return temperature_data

@@ -7,11 +7,13 @@ import math
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from statsmodels.regression.linear_model import OLS
+from statsmodels.tools import add_constant
 
 
 class SSMS(sm.tsa.statespace.MLEModel):
     def __init__(self, data: pd.DataFrame, group_name: str, y_name: str, z_names: list, c_names: list, cov_rest: str,
-                 var_start: float, cov_start: float):
+                 var_start: float, cov_start: float, fancy_start: bool):
         """
         Constructs a state space model for sales.
 
@@ -27,6 +29,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
             'IDE': independently distributed errors (for both observations and states)}
         :param var_start: starting value for variances
         :param cov_start: starting value for covariances
+        :param fancy_start: use fancy starting values for the variances (computed with OLS)
         """
 
         # Construct arrays of group names, and endogenous (y) and exogenous (x) variables.
@@ -44,6 +47,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
         self.cov_rest = cov_rest
         self.var_start = var_start
         self.cov_start = cov_start
+        self.fancy_start = fancy_start
 
         # Intialize the state-space model.
         super(SSMS, self).__init__(endog=y, exog=x_c, k_states=2 * n + k, initialization='diffuse')
@@ -56,6 +60,9 @@ class SSMS(sm.tsa.statespace.MLEModel):
 
         # Split x_z matrix into k distinct parts for each time period.
         x_split = np.apply_along_axis(np.split, 1, x_z, indices_or_sections=k)
+
+        # Save for starting value computation.
+        self.x = x_split
 
         # Concatenate matrices to form [I_N, O_N, x[t, 1], x[t, 2], ..., x[t, k]].
         x_concat = np.array([np.hstack((z_mu, z_nu, np.transpose(np.vstack(arr)))) for arr in x_split])
@@ -95,6 +102,20 @@ class SSMS(sm.tsa.statespace.MLEModel):
         # Number of lambda: (n + k) * c_k.
         lambda_start = np.zeros((n + k) * c_k)
 
+        if self.fancy_start:
+            # Run OLS regressions to get starting values for the variances.
+            y_vars = np.zeros(n)
+            mu_vars = np.zeros(n)
+            x_vars = np.zeros((n, k))
+            for i in range(n):
+                y = self.endog[:, i]
+                ols = OLS(y, add_constant(self.x[:, :, i]))
+                ols_result = ols.fit()
+                y_vars[i] = np.var(ols_result.resid)
+                mu_vars[i] = np.square(ols_result.HC0_se[0])
+                x_vars[i, :] = np.square(ols_result.HC0_se[1:])
+            var_start = np.concatenate((y_vars, mu_vars, np.mean(x_vars, axis=0)))
+
         if self.cov_rest == 'RC':
             # For y, mu, and nu, n variances, one covariance.
             # Only variances for the other k states (not region-specific).
@@ -103,15 +124,36 @@ class SSMS(sm.tsa.statespace.MLEModel):
 
             # Change variances for y, mu, and nu.
             var_to = 0
-            for i in range(3):
+            if self.fancy_start:
+                # Change variances for y.
                 var_from = var_to
                 var_to += n + 1
-                cov_start[var_from:var_from + n] = self.var_start
+                cov_start[var_from:var_from + n] = var_start[:n]
 
-            # Change variances for all states corresponding to independent variables.
-            var_from = var_to
-            var_to += k
-            cov_start[var_from:var_to] = self.var_start
+                # Change variances for mu.
+                var_from = var_to
+                var_to += n + 1
+                cov_start[var_from:var_from + n] = var_start[n:2 * n]
+
+                # Change variances for nu.
+                var_from = var_to
+                var_to += n + 1
+                cov_start[var_from:var_from + n] = var_start[n:2 * n] / 10
+
+                # Change variances for all states corresponding to independent variables.
+                var_from = var_to
+                var_to += k
+                cov_start[var_from:var_to] = var_start[2 * n:]
+            else:
+                for i in range(3):
+                    var_from = var_to
+                    var_to += n + 1
+                    cov_start[var_from:var_from + n] = self.var_start
+
+                # Change variances for all states corresponding to independent variables.
+                var_from = var_to
+                var_to += k
+                cov_start[var_from:var_to] = self.var_start
         elif self.cov_rest == 'IDO':
             # For y, n variances, no covariance.
             # For mu and nu, n variances, one covariance.
@@ -119,25 +161,61 @@ class SSMS(sm.tsa.statespace.MLEModel):
             # Number of covariances: n + 2 * (n + 1) + k
             cov_start = np.ones(n + 2 * (n + 1) + k) * self.cov_start
 
-            # Change variances for y.
             var_from = 0
             var_to = n
-            cov_start[var_from:var_to] = self.var_start
+            if self.fancy_start:
+                # Change variances for y.
+                var_from = var_to
+                var_to += n
+                cov_start[var_from:var_from + n] = var_start[:n]
 
-            # Change variances for mu and nu.
-            for i in range(2):
+                # Change variances for mu.
                 var_from = var_to
                 var_to += n + 1
-                cov_start[var_from:var_from + n] = self.var_start
+                cov_start[var_from:var_from + n] = var_start[n:2 * n]
 
-            # Change variances for all states corresponding to independent variables.
-            var_from = var_to
-            var_to += k
-            cov_start[var_from:var_to] = self.var_start
+                # Change variances for nu.
+                var_from = var_to
+                var_to += n + 1
+                cov_start[var_from:var_from + n] = var_start[n:2 * n] / 10
+
+                # Change variances for all states corresponding to independent variables.
+                var_from = var_to
+                var_to += k
+                cov_start[var_from:var_to] = var_start[2 * n:]
+            else:
+                # Change variances for y.
+                cov_start[var_from:var_to] = self.var_start
+
+                # Change variances for mu and nu.
+                for i in range(2):
+                    var_from = var_to
+                    var_to += n + 1
+                    cov_start[var_from:var_from + n] = self.var_start
+
+                # Change variances for all states corresponding to independent variables.
+                var_from = var_to
+                var_to += k
+                cov_start[var_from:var_to] = self.var_start
         else:
             # Only variances, no covariance.
             # Number of covariances: 3 * n + k.
-            cov_start = np.ones(3 * n + k) * self.var_start
+            if self.fancy_start:
+                cov_start = np.zeros(3 * n + k)
+
+                # Change variances for y.
+                cov_start[:n] = var_start[:n]
+
+                # Change variances for mu.
+                cov_start[n:2 * n] = var_start[n:2 * n]
+
+                # Change variances for nu.
+                cov_start[2 * n:3 * n] = var_start[n:2 * n] / 10
+
+                # Change variances for all states corresponding to independent variables.
+                cov_start[3 * n:] = var_start[2 * n:]
+            else:
+                cov_start = np.ones(3 * n + k) * self.var_start
         return np.concatenate((lambda_start, cov_start))
 
     def transform_params(self, unconstrained):
