@@ -79,6 +79,8 @@ def load_data(filepath: str):
     n = len(y_group[0])
     block = np.ceil(0.25 * n / 2).astype(int)
 
+    outliers_names = []
+    outliers_data = []
     for obs in range(len(y_group)):
         y = y_group[obs]
 
@@ -96,10 +98,13 @@ def load_data(filepath: str):
         sd = np.std(y)
         if np.any(y > mu + 4 * sd) or np.any(y < mu - 4 * sd):
             data = data[~data['Region'].isin([group_names[obs]])]
+            outliers_names.append(group_names[obs])
+            outliers_data.append([y, mu, sd])
+    data.to_excel('data.xlsx')
 
     # Drop regions that cause trouble.
     # data = data[~data['Region'].isin(['NL226_340', 'NL329_340', 'NL328_501', 'NL225_509'])]
-    return data
+    return data, outliers_data, outliers_names
 
 
 def load_transaction(filepath: str):

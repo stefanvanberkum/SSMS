@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 
 from data_loader import load_data
 from state_space import SSMS
+from utils import plot_variables
 
 """
 TODO:
@@ -29,16 +30,17 @@ def main():
 
     start_time = time.time()
 
-    data = load_data(data_path)
+    loaded_data = load_data(data_path)
+    data = loaded_data[0]
 
-    # plot_sales(data)
+    # plot_variables(loaded_data[1], loaded_data[2])
     # exit(0)
 
     test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
 
-    # z_names = ['WVO', 'SchoolHolidayMiddle', 'SchoolHolidayNorth', 'SchoolHolidaySouth',
-    # '0-25_nbrpromos_index_201801',
-    #           '25-50_nbrpromos_index_201801', '50-75_nbrpromos_index_201801']
+    z_names = ['WVO', 'SchoolHolidayMiddle', 'SchoolHolidayNorth', 'SchoolHolidaySouth',
+    '0-25_nbrpromos_index_201801',
+              '25-50_nbrpromos_index_201801', '50-75_nbrpromos_index_201801']
     z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
                '50-75_nbrpromos_index_201801']
     c_names = ['StringencyIndexDiff']
