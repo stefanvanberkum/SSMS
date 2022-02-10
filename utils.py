@@ -11,9 +11,9 @@ from state_space import SSMS
 
 def print_params(results: MLEResults, save_path: str):
     """
-    Pretty-prints the parameters for an IDE-type SSMS model.
+    Pretty-prints the parameters for an SSMS model.
 
-    :param results: results object for an IDE-type SSMS model
+    :param results: results object for an SSMS model
     :param save_path: path to save location
     :return:
     """
@@ -21,8 +21,6 @@ def print_params(results: MLEResults, save_path: str):
     if not isinstance(model, SSMS):
         print("Can't print parameters for a non-SSMS model.")
         return
-    if model.cov_rest != 'IDE':
-        print("Can't print parameters for a non-IDE SSMS model.")
 
     # Retrieve fitted parameters, z-statistics, and p-values.
     regions = model.group_names
@@ -66,7 +64,7 @@ def plot_sales(data: pd.DataFrame):
         sd = np.std(y)
         plt.suptitle(group_names[obs])
         plt.plot(t, y, 'b')
-        plt.plot(t, mu + 4 * sd, 'r')
-        plt.plot(t, mu - 4 * sd, 'r')
+        plt.plot(t, mu + 6 * sd, 'r')
+        plt.plot(t, mu - 6 * sd, 'r')
         plt.show()
         plt.close('all')

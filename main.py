@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 
 from data_loader import load_data
 from state_space import SSMS
+from utils import print_params
 
 """
 TODO:
@@ -31,9 +32,6 @@ def main():
 
     data = load_data(data_path)
 
-    # plot_sales(data)
-    # exit(0)
-
     test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
 
     # z_names = ['WVO', 'SchoolHolidayMiddle', 'SchoolHolidayNorth', 'SchoolHolidaySouth',
@@ -43,18 +41,18 @@ def main():
                '50-75_nbrpromos_index_201801']
     c_names = ['StringencyIndexDiff']
     cov_rest = 'IDE'
-    var_start = 0.1
+    var_start = 1
     cov_start = 0
 
-    model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names, cov_rest=cov_rest,
-                 var_start=var_start, cov_start=cov_start, fancy_start=True)
+    model = SSMS(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
+                 cov_rest=cov_rest, var_start=var_start, cov_start=cov_start, fancy_start=True)
     # initial = model.fit(maxiter=1000, maxfun=1000000)
-    # result = model.fit(initial.params, method='nm', maxiter=20000)
-    # initial = model.fit(method='nm')
+    # result = model.fit(initial.params, method='nm', maxiter=200000)
+    # initial = model.fit(method='nm', maxiter=20000)
     # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
-    result = model.fit(maxiter=1000, maxfun=1000000)
-    # print(result.summary())
-    # print_params(result, save_path)
+    result = model.fit(maxiter=1000, maxfun=1000000, cov_type='oim')
+    print(result.summary())
+    print_params(result, save_path)
 
     y_pred = result.get_prediction(start=10, end=190)
     y1_pred = y_pred.predicted_mean[:, 0]
@@ -103,7 +101,6 @@ def run_exploratory(data, save_path):
     :param save_path: save path for plots and parameters
     :return:
     """
-    test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
 
     z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
                '50-75_nbrpromos_index_201801']
@@ -116,8 +113,8 @@ def run_exploratory(data, save_path):
         :param params: a list of parameters to be tested, of the form [cov_rest, var_start, cov_start]
         :return:
         """
-        model = SSMS(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
-                     cov_rest=params[0], var_start=params[1], cov_start=params[2], fancy_start=False)
+        model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
+                     cov_rest=params[0], var_start=1, cov_start=params[1], fancy_start=True)
         result = model.fit(maxiter=1000, maxfun=1000000, disp=-1)
 
         # Compute predictions and MSE.
@@ -149,7 +146,7 @@ def run_exploratory(data, save_path):
         axes[1, 1].set_title('mse: {0}'.format(format(mse_4, '.4f')))
         axes[1, 1].plot(t, model.endog[10:, 3], 'b')
         axes[1, 1].plot(t, y4_pred, 'r')
-        name = '_'.join([params[0], str(params[1]), str(params[2])])
+        name = '_'.join([params[0], str(params[1])])
         fig.suptitle('{0} (mse: {1})'.format(name, format(mse, '.4f')))
         plt.savefig(os.path.join(save_path, format(mse, '.4f') + '_' + name), dpi=300, format='png')
         plt.close('all')
@@ -157,18 +154,10 @@ def run_exploratory(data, save_path):
         # Save parameters to CSV.
         np.savetxt(os.path.join(save_path, format(mse, '.4f') + '_' + name + '.csv'), result.params, delimiter=',')
 
-    option_list = {'cov_rest': ['RC', 'IDO', 'IDE'], 'var_start': [0.001, 0.01, 0.1, 1, 10, 100],
-                   'cov_start': [0, 0.001, 0.01, 0.1, 1, 10, 100]}
-
     # Run exploratory analysis.
-    for cov_rest in option_list['cov_rest']:
-        for var_start in option_list['var_start']:
-            if cov_rest == 'IDE':
-                explore([cov_rest, var_start, 0])
-            else:
-                for cov_start in option_list['cov_start']:
-                    if var_start > cov_start:
-                        explore([cov_rest, var_start, cov_start])
+    explore(['RC', 0])
+    explore(['IDO', 0])
+    explore(['IDE', 0])
 
 
 if __name__ == '__main__':

@@ -50,7 +50,7 @@ class SSMS(sm.tsa.statespace.MLEModel):
         self.fancy_start = fancy_start
 
         # Intialize the state-space model.
-        super(SSMS, self).__init__(endog=y, exog=x_c, k_states=2 * n + k, initialization='diffuse')
+        super(SSMS, self).__init__(endog=y, exog=x_c, k_states=2 * n + k, initialization='approximate_diffuse')
 
         # First part of Z matrix is NxN identity matrix for mu.
         z_mu = np.eye(n)
@@ -161,13 +161,12 @@ class SSMS(sm.tsa.statespace.MLEModel):
             # Number of covariances: n + 2 * (n + 1) + k
             cov_start = np.ones(n + 2 * (n + 1) + k) * self.cov_start
 
-            var_from = 0
-            var_to = n
+            var_to = 0
             if self.fancy_start:
                 # Change variances for y.
-                var_from = var_to
+                var_from = 0
                 var_to += n
-                cov_start[var_from:var_from + n] = var_start[:n]
+                cov_start[var_from:var_to] = var_start[:n]
 
                 # Change variances for mu.
                 var_from = var_to
@@ -185,6 +184,8 @@ class SSMS(sm.tsa.statespace.MLEModel):
                 cov_start[var_from:var_to] = var_start[2 * n:]
             else:
                 # Change variances for y.
+                var_from = 0
+                var_to += n
                 cov_start[var_from:var_to] = self.var_start
 
                 # Change variances for mu and nu.

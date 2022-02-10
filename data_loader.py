@@ -9,11 +9,13 @@ import numpy as np
 import pandas as pd
 
 
-def load_data(filepath: str):
+def load_data(filepath: str, drop_outliers=False, sd=6):
     """
     Load the required data.
 
     :param filepath: the location of the files
+    :param drop_outliers: whether or not to drop outliers, default is False
+    :param sd: number of standard deviations away from moving average to be considered an outlier, default is 6
     :return: formatted data
     """
 
@@ -69,33 +71,34 @@ def load_data(filepath: str):
     # Drop incomplete time series.
     data = data[~data['Region'].isin(['NL332_330', 'NL327_330', 'NL212_509', 'NL423_340'])]
 
-    # Drop time series that contain outliers.
-    grouped = data.groupby('Region', sort=False)
-    group_names = [name for name, group in grouped]
-    group_list = [group for name, group in grouped]
+    if drop_outliers:
+        # Drop time series that contain outliers.
+        grouped = data.groupby('Region', sort=False)
+        group_names = [name for name, group in grouped]
+        group_list = [group for name, group in grouped]
 
-    # Collect grouped y and x values in a list.
-    y_group = [group['SalesGoodsEUR'].to_numpy() for group in group_list]
-    n = len(y_group[0])
-    block = np.ceil(0.25 * n / 2).astype(int)
+        # Collect grouped y and x values in a list.
+        y_group = [group['SalesGoodsEUR'].to_numpy() for group in group_list]
+        n = len(y_group[0])
+        block = np.ceil(0.25 * n / 2).astype(int)
 
-    for obs in range(len(y_group)):
-        y = y_group[obs]
+        for obs in range(len(y_group)):
+            y = y_group[obs]
 
-        mu = np.zeros(n)
-        mu[0] = np.mean(y[1:block])
-        mu[n - 1] = np.mean(y[n - 1 - block:n - 1])
-        for i in range(1, n - 1):
-            if i < block:
-                mu[i] = np.mean(np.concatenate((y[:i], y[i + 1:i + 1 + block])))
-            elif i + 1 + block > n - 1:
-                mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:])))
-            else:
-                mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:i + 1 + block])))
+            mu = np.zeros(n)
+            mu[0] = np.mean(y[1:block])
+            mu[n - 1] = np.mean(y[n - 1 - block:n - 1])
+            for i in range(1, n - 1):
+                if i < block:
+                    mu[i] = np.mean(np.concatenate((y[:i], y[i + 1:i + 1 + block])))
+                elif i + 1 + block > n - 1:
+                    mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:])))
+                else:
+                    mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:i + 1 + block])))
 
-        sd = np.std(y)
-        if np.any(y > mu + 4 * sd) or np.any(y < mu - 4 * sd):
-            data = data[~data['Region'].isin([group_names[obs]])]
+            obs_sd = np.std(y)
+            if np.any(y > mu + sd * obs_sd) or np.any(y < mu - sd * obs_sd):
+                data = data[~data['Region'].isin([group_names[obs]])]
 
     # Drop regions that cause trouble.
     # data = data[~data['Region'].isin(['NL226_340', 'NL329_340', 'NL328_501', 'NL225_509'])]
