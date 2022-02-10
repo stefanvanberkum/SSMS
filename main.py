@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 
 from data_loader import load_data
 from state_space import SSMS
-from utils import print_params
+from utils import print_results
 
 """
 TODO:
@@ -30,70 +30,86 @@ def main():
 
     start_time = time.time()
 
-    data = load_data(data_path)
+    # data, outlier_data, outlier_names = load_data(data_path)
+    # test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
 
-    # plot_variables(loaded_data[1], loaded_data[2])
-    # exit(0)
-
-    test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
-
-    # z_names = ['WVO', 'SchoolHolidayMiddle', 'SchoolHolidayNorth', 'SchoolHolidaySouth',
-    # '0-25_nbrpromos_index_201801',
-    #           '25-50_nbrpromos_index_201801', '50-75_nbrpromos_index_201801']
     z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
                '50-75_nbrpromos_index_201801']
     c_names = ['StringencyIndexDiff']
-    cov_rest = 'IDE'
     var_start = 1
     cov_start = 0
+    cov_rests = ['RC', 'IDO', 'IDE']
+    cov_types = ['opg', 'oim', 'approx', 'robust', 'approx_robust']
 
-    model = SSMS(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
-                 cov_rest=cov_rest, var_start=var_start, cov_start=cov_start, fancy_start=True)
+    # model = SSMS(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
+    #             cov_rest='IDE', var_start=1, cov_start=0, fancy_start=True)
     # initial = model.fit(maxiter=1000, maxfun=1000000)
     # result = model.fit(initial.params, method='nm', maxiter=200000)
     # initial = model.fit(method='nm', maxiter=20000)
     # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
-    result = model.fit(maxiter=1000, maxfun=1000000, cov_type='oim')
-    print(result.summary())
-    print_params(result, save_path)
+    # result = model.fit(maxiter=1000, maxfun=1000000)
+    # print(result.summary())
+    # print_results(result, save_path, 'test')
+    # exit(0)
 
-    y_pred = result.get_prediction(start=10, end=190)
-    y1_pred = y_pred.predicted_mean[:, 0]
-    mse_1 = np.mean(np.square(model.endog[10:, 0] - y1_pred))
-    y2_pred = y_pred.predicted_mean[:, 1]
-    mse_2 = np.mean(np.square(model.endog[10:, 1] - y2_pred))
-    y3_pred = y_pred.predicted_mean[:, 2]
-    mse_3 = np.mean(np.square(model.endog[10:, 2] - y3_pred))
-    y4_pred = y_pred.predicted_mean[:, 3]
-    mse_4 = np.mean(np.square(model.endog[10:, 3] - y4_pred))
-    mse = (mse_1 + mse_2 + mse_3 + mse_4) / 4
-    t = np.arange(11, 192)
-    fig, axes = plt.subplots(2, 2)
-    axes[0, 0].set_title('mse: {0}'.format(format(mse_1, '.4f')))
-    axes[0, 0].set_xticks([])
-    axes[0, 0].plot(t, model.endog[10:, 0], 'b')
-    axes[0, 0].plot(t, y1_pred, 'r')
-    axes[0, 1].set_title('mse: {0}'.format(format(mse_2, '.4f')))
-    axes[0, 1].set_xticks([])
-    axes[0, 1].plot(t, model.endog[10:, 1], 'b')
-    axes[0, 1].plot(t, y2_pred, 'r')
-    axes[1, 0].set_title('mse: {0}'.format(format(mse_3, '.4f')))
-    axes[1, 0].plot(t, model.endog[10:, 2], 'b')
-    axes[1, 0].plot(t, y3_pred, 'r')
-    axes[1, 1].set_title('mse: {0}'.format(format(mse_4, '.4f')))
-    axes[1, 1].plot(t, model.endog[10:, 3], 'b')
-    axes[1, 1].plot(t, y4_pred, 'r')
-    name = 'full_test'
-    fig.suptitle('{0} (mse: {1})'.format(name, format(mse, '.4f')))
-    plt.savefig(os.path.join(save_path, name), dpi=300, format='png')
-    np.savetxt(os.path.join(save_path, name + '.csv'), result.params, delimiter=',')
-    plt.close('all')
+    # Contaminated data.
+    contaminated_data, _, _ = load_data(data_path)
 
-    end_time = time.time()
-    print("Runtime:", (end_time - start_time), sep=' ')
+    # Clean data.
+    clean_data, outlier_data_6sd, outlier_names_6sd = load_data(data_path, True, 6)
 
-    result.save(os.path.join(save_path, 'result.pickle'))
-    np.savetxt(os.path.join(save_path, 'result.csv'), result.params, delimiter=',')
+    # Extra clean data.
+    extra_clean_data, outlier_data_4sd, outlier_names_4sd = load_data(data_path, True, 4)
+
+    data_options = {'contaminated': contaminated_data, 'clean': clean_data, 'extra clean': extra_clean_data}
+
+    for data_type in data_options:
+        data = data_options[data_type]
+        for cov_rest in cov_rests:
+            for cov_type in cov_types:
+                print("Running " + cov_rest + "_" + cov_type + " with " + data_type + " data...")
+
+                model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
+                             cov_rest=cov_rest, var_start=var_start, cov_start=cov_start, fancy_start=True)
+                result = model.fit(maxiter=1000, maxfun=1000000, cov_type=cov_type, disp=-1)
+
+                y_pred = result.get_prediction(start=10, end=190)
+                y1_pred = y_pred.predicted_mean[:, 0]
+                mse_1 = np.mean(np.square(model.endog[10:, 0] - y1_pred))
+                y2_pred = y_pred.predicted_mean[:, 1]
+                mse_2 = np.mean(np.square(model.endog[10:, 1] - y2_pred))
+                y3_pred = y_pred.predicted_mean[:, 2]
+                mse_3 = np.mean(np.square(model.endog[10:, 2] - y3_pred))
+                y4_pred = y_pred.predicted_mean[:, 3]
+                mse_4 = np.mean(np.square(model.endog[10:, 3] - y4_pred))
+                mse = (mse_1 + mse_2 + mse_3 + mse_4) / 4
+                t = np.arange(11, 192)
+                fig, axes = plt.subplots(2, 2)
+                axes[0, 0].set_title('mse: {0}'.format(format(mse_1, '.4f')))
+                axes[0, 0].set_xticks([])
+                axes[0, 0].plot(t, model.endog[10:, 0], 'b')
+                axes[0, 0].plot(t, y1_pred, 'r')
+                axes[0, 1].set_title('mse: {0}'.format(format(mse_2, '.4f')))
+                axes[0, 1].set_xticks([])
+                axes[0, 1].plot(t, model.endog[10:, 1], 'b')
+                axes[0, 1].plot(t, y2_pred, 'r')
+                axes[1, 0].set_title('mse: {0}'.format(format(mse_3, '.4f')))
+                axes[1, 0].plot(t, model.endog[10:, 2], 'b')
+                axes[1, 0].plot(t, y3_pred, 'r')
+                axes[1, 1].set_title('mse: {0}'.format(format(mse_4, '.4f')))
+                axes[1, 1].plot(t, model.endog[10:, 3], 'b')
+                axes[1, 1].plot(t, y4_pred, 'r')
+                name = '_'.join([cov_rest, cov_type, data_type])
+                fig.suptitle('{0} (mse: {1})'.format(name, format(mse, '.4f')))
+                plt.savefig(os.path.join(save_path, name), dpi=300, format='png')
+                np.savetxt(os.path.join(save_path, name + '.csv'), result.params, delimiter=',')
+                plt.close('all')
+
+                print_results(result, save_path, 'test')
+                result.save(os.path.join(save_path, name + '.pickle'))
+
+                end_time = time.time()
+                print("Runtime:", (end_time - start_time), sep=' ')
 
 
 def run_exploratory(data, save_path):
