@@ -93,7 +93,7 @@ def main():
 
                 mses = np.zeros(len(group_names))
                 for region in range(len(group_names)):
-                    mses[region] = np.mean(np.square(model.endog[10:, region] - y_pred[:, region]))
+                    mses[region] = np.mean(np.square(model.endog[10:, region] - y_pred.predicted_mean[:, region]))
                 mse = np.mean(mses)
 
                 t = np.arange(11, 192)
