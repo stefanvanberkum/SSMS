@@ -2,7 +2,6 @@
 This module provides utility methods.
 """
 import numpy as np
-import pandas as pd
 from matplotlib import pyplot as plt
 from statsmodels.tsa.statespace.mlemodel import MLEResults
 
@@ -36,7 +35,7 @@ def print_params(results: MLEResults, save_path: str):
     print(0)
 
 
-def plot_variables(data: list, data_names: list):
+def plot_variables(data: list, data_names: list, sd: float):
     if data_names:
         print(f'Regions with outliers: {data_names}')
         t = np.arange(1, len(data[0][0]) + 1)
@@ -44,10 +43,8 @@ def plot_variables(data: list, data_names: list):
             plt.figure()
             plt.suptitle(data_names[i])
             plt.plot(t, data[i][0], 'b')
-            plt.plot(t, data[i][1] + 4 * data[i][2], 'r')
-            plt.plot(t, data[i][1] - 4 * data[i][2], 'r')
+            plt.plot(t, data[i][1] + sd * data[i][2], 'r')
+            plt.plot(t, data[i][1] - sd * data[i][2], 'r')
     else:
         print('No outliers')
     plt.show()
-
-
