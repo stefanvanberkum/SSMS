@@ -32,6 +32,9 @@ def main():
 
     data = load_data(data_path)
 
+    # plot_variables(loaded_data[1], loaded_data[2])
+    # exit(0)
+
     test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
 
     # z_names = ['WVO', 'SchoolHolidayMiddle', 'SchoolHolidayNorth', 'SchoolHolidaySouth',

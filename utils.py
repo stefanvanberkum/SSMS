@@ -36,35 +36,18 @@ def print_params(results: MLEResults, save_path: str):
     print(0)
 
 
-def plot_sales(data: pd.DataFrame):
-    grouped = data.groupby('Region', sort=False)
-    group_names = [name for name, group in grouped]
-    group_list = [group for name, group in grouped]
+def plot_variables(data: list, data_names: list):
+    if data_names:
+        print(f'Regions with outliers: {data_names}')
+        t = np.arange(1, len(data[0][0]) + 1)
+        for i in range(len(data_names)):
+            plt.figure()
+            plt.suptitle(data_names[i])
+            plt.plot(t, data[i][0], 'b')
+            plt.plot(t, data[i][1] + 4 * data[i][2], 'r')
+            plt.plot(t, data[i][1] - 4 * data[i][2], 'r')
+    else:
+        print('No outliers')
+    plt.show()
 
-    # Collect grouped y and x values in a list.
-    y_group = [group['SalesGoodsEUR'].to_numpy() for group in group_list]
-    n = len(y_group[0])
-    block = np.ceil(0.25 * n / 2).astype(int)
 
-    t = np.arange(1, n + 1)
-    for obs in range(len(y_group)):
-        y = y_group[obs]
-
-        mu = np.zeros(n)
-        mu[0] = np.mean(y[1:block])
-        mu[n - 1] = np.mean(y[n - 1 - block:n - 1])
-        for i in range(1, n - 1):
-            if i < block:
-                mu[i] = np.mean(np.concatenate((y[:i], y[i + 1:i + 1 + block])))
-            elif i + 1 + block > n - 1:
-                mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:])))
-            else:
-                mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:i + 1 + block])))
-
-        sd = np.std(y)
-        plt.suptitle(group_names[obs])
-        plt.plot(t, y, 'b')
-        plt.plot(t, mu + 6 * sd, 'r')
-        plt.plot(t, mu - 6 * sd, 'r')
-        plt.show()
-        plt.close('all')
