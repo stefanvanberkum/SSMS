@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 
-def load_data(filepath: str, drop_outliers=False, threshold=6):
+def load_data(filepath: str, drop_outliers=True, threshold=10):
     """
     Load the required data.
 

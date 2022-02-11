@@ -56,18 +56,15 @@ def main():
             else:
                 cov_starts = [0]
             for cov_start in cov_starts:
+                name = '_'.join([cov_rest, str(alt), str(cov_start)])
+                print("Running " + name + "...")
+                split_time = time.time()
                 if alt:
-                    print("Running " + cov_rest + "...")
-                    split_time = time.time()
-
                     model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
                                  cov_rest=cov_rest, cov_group=cov_group, var_start=var_start, cov_start=cov_start,
                                  fancy_start=True)
                     result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type)
                 else:
-                    print("Running " + cov_rest + "-alt...")
-                    split_time = time.time()
-
                     model = SSMS_alt(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names,
                                      d_names=d_names, c_names=c_names, cov_rest=cov_rest, cov_group=cov_group,
                                      var_start=var_start, cov_start=cov_start, fancy_start=True)
@@ -112,7 +109,6 @@ def main():
                 axes[1, 1].set_title('mse: {0}'.format(format(mse_4, '.4f')))
                 axes[1, 1].plot(t, model.endog[10:, region_4], 'b')
                 axes[1, 1].plot(t, y4_pred, 'r')
-                name = '_'.join([cov_rest, alt, cov_start])
                 fig.suptitle('{0} (mse: {1})'.format(name, format(mse, '.4f')))
                 plt.savefig(os.path.join(save_path, name), dpi=300, format='png')
                 plt.close('all')
