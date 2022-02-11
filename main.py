@@ -30,7 +30,6 @@ def main():
 
     start_time = time.time()
 
-    # data, outlier_data, outlier_names = load_data(data_path)
     # test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
 
     z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
@@ -53,13 +52,13 @@ def main():
     # exit(0)
 
     # Contaminated data.
-    contaminated_data, _, _ = load_data(data_path)
+    contaminated_data = load_data(data_path)
 
     # Clean data.
-    clean_data, outlier_data_6sd, outlier_names_6sd = load_data(data_path, True, 6)
+    clean_data = load_data(data_path, True, 6)
 
     # Extra clean data.
-    extra_clean_data, outlier_data_4sd, outlier_names_4sd = load_data(data_path, True, 4)
+    extra_clean_data = load_data(data_path, True, 4)
 
     data_options = {'contaminated': contaminated_data, 'clean': clean_data, 'extra clean': extra_clean_data}
 
