@@ -51,8 +51,10 @@ def load_data(filepath: str, drop_outliers=True, threshold=6):
         ma_data, group_names, outliers = get_outliers(data, threshold)
         data['index'] = data.index
         data['index'] = pd.to_datetime(data['index'] + '1', format='%Y%W%w')
+
         for i in enumerate(outliers):
             region_index = i[0]
+
             if outliers[region_index][0].size != 0:
                 outlier_info.append([region_index, group_names[region_index]])
                 pre_index = int(outliers[region_index][0][0] - 1)
@@ -63,9 +65,12 @@ def load_data(filepath: str, drop_outliers=True, threshold=6):
                     data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'].values[0]
                 post_sales = data.loc[(data.index == post_date) & (
                     data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'].values[0]
+
                 # Each outlier in SalesGoodsEUR is replaced with new_sales
                 new_sales = (pre_sales + post_sales) / 2
+
                 for j in outliers[region_index][0]:
+
                     # Outliers have to be consecutive, check printed dates (and outlier value/size)!
                     if outliers[region_index][0].size > 0:
                         outlier_value = ma_data[region_index][0][j]
@@ -76,11 +81,17 @@ def load_data(filepath: str, drop_outliers=True, threshold=6):
                         data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'] = new_sales
                 print()
 
-        # Plot regions with outliers  # plot_variables(ma_data, outlier_info)
+        """
+        # Plot regions with outliers.  
+        plot_variables(ma_data, outlier_info)
+        """
 
-        # Plot regions after removing outliers, moving average/sd change after removing outliers,  # so new outliers
-        # might appear  # ma_data_01, group_names_01, outliers_01 = get_outliers(data, threshold)  # plot_variables(
-        # ma_data_01, outlier_info)
+        """
+        # Plot regions after removing outliers, moving average/sd change after removing outliers, so new outliers
+        # might appear.
+        ma_data_01, group_names_01, outliers_01 = get_outliers(data, threshold)
+        plot_variables(ma_data_01, outlier_info)
+        """
 
     # Drop regions that cause trouble.
     # data = data[~data['Region'].isin(['NL226_340', 'NL329_340', 'NL328_501', 'NL225_509'])]
