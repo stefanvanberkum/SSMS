@@ -4,18 +4,21 @@ This module provides functions for loading and formatting the data.
 
 import os
 from datetime import date
+from utils import plot_variables
 
 import numpy as np
 import pandas as pd
+import datetime
+import math
 
 
-def load_data(filepath: str, drop_outliers=False, sd=6):
+def load_data(filepath: str, drop_outliers=False, threshold=6):
     """
     Load the required data.
 
     :param filepath: the location of the files
     :param drop_outliers: whether or not to drop outliers, default is False
-    :param sd: number of standard deviations away from moving average to be considered an outlier, default is 6
+    :param threshold: number of standard deviations away from moving average to be considered an outlier, default is 6
     :return: formatted data
     """
 
@@ -41,72 +44,100 @@ def load_data(filepath: str, drop_outliers=False, sd=6):
     data.index.name = 'YearWeek'
     data['Region'] = data['nuts3_code'] + '_' + data['StoreRegionNbr'].astype(str)
 
-    # Aggregate rows by "Region".
-    # Average sales per region is used, it's also possible to sum the sales per region.
-    # StringencyIndex, Turnover_hospitality, and Turnover_supermarket are not region specific (only time dependent).
-    # data = data.groupby([data.index, 'StoreRegionNbr', 'nuts3_code']).agg({
-    #    'StoreRegionNbr': 'first', 'StoreRegionName': 'first', 'corop_name': 'first', 'nuts3_code': 'first',
-    #    'QuantityCE': 'mean', 'SalesGoodsExclDiscountEUR': 'mean', 'SalesGoodsEUR': 'mean', 'NbrOfTransactions':
-    #    'mean',
-    #    'WVO': 'mean', 'SchoolHolidayMiddle': 'mean', 'SchoolHolidayNorth': 'mean', 'SchoolHolidaySouth': 'mean',
-    #    'TempMin': 'mean', 'TempMax': 'mean', 'TempAvg': 'mean', 'RainFallSum': 'mean', 'SundurationSum': 'mean',
-    #    '0-25_nbrpromos_index_201801': 'mean', '25-50_nbrpromos_index_201801': 'mean',
-    #    '50-75_nbrpromos_index_201801': 'mean', 'Turnover_hospitality': 'mean', 'Turnover_supermarket': 'mean',
-    #    'StringencyIndex': 'mean'})
-    # data['Region'] = data.index.get_level_values('nuts3_code') + '_' + data.index.get_level_values(
-    #    'StoreRegionNbr').astype(str)
-    # data = data.reset_index(level=(1, 2), drop=True)
-
-    # number_of_regions = data['Region'].nunique()
-    # print(f'Number of unique regions: {number_of_regions}')
-    # data.to_excel('data.xlsx')
-
-    # # Plot variables, Groot-Rijnmond store 506 is only used as example
-    # data_groot_rijnmond = data.loc[(data['corop_name'] == 'Groot-Rijnmond') & (data['StoreRegionNbr'] == 506)]
-    # data_groot_rijnmond.reset_index().plot(x='YearWeek', y=['StringencyIndex'])
-    # data_groot_rijnmond.reset_index().plot(x='YearWeek', y='SalesGoodsEUR')
-    # data_groot_rijnmond.reset_index().plot.scatter(x='StringencyIndex', y='SalesGoodsEUR')
-    # plt.show()
-
     # Drop incomplete time series.
     data = data[~data['Region'].isin(['NL332_330', 'NL327_330', 'NL212_509', 'NL423_340'])]
 
-    outlier_names = []
-    outlier_data = []
+    outlier_info = []
     if drop_outliers:
-        # Drop time series that contain outliers.
-        grouped = data.groupby('Region', sort=False)
-        group_names = [name for name, group in grouped]
-        group_list = [group for name, group in grouped]
+        ma_data, group_names, outliers = get_outliers(data, threshold)
+        data['index'] = data.index
+        data['index'] = pd.to_datetime(data['index'] + '1', format='%Y%W%w')
+        for i in enumerate(outliers):
+            region_index = i[0]
+            if outliers[region_index][0].size != 0:
+                outlier_info.append([region_index, group_names[region_index]])
+                pre_index = int(outliers[region_index][0][0] - 1)
+                post_index = int(outliers[region_index][0][outliers[region_index][0].size - 1] + 1)
+                pre_date = get_date(data, pre_index)
+                post_date = get_date(data, post_index)
+                pre_sales = data.loc[(data.index == pre_date) & (data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'].values[0]
+                post_sales = data.loc[(data.index == post_date) & (data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'].values[0]
+                # Each outlier in SalesGoodsEUR is replaced with new_sales
+                new_sales = (pre_sales + post_sales) / 2
+                for j in outliers[region_index][0]:
+                    # Outliers have to be consecutive, check printed dates (and outlier value/size)!
+                    if outliers[region_index][0].size > 0:
+                        outlier_value = ma_data[region_index][0][j]
+                        outlier_size = abs(ma_data[region_index][0][j] - ma_data[region_index][1][j])
+                        print(f'{group_names[region_index]} ({get_date(data, int(j))}): {outlier_value}, {outlier_size}')
+                    data.loc[(data.index == get_date(data, int(j))) & (
+                        data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'] = new_sales
+                print()
 
-        # Collect grouped y and x values in a list.
-        y_group = [group['SalesGoodsEUR'].to_numpy() for group in group_list]
-        n = len(y_group[0])
-        block = np.ceil(0.25 * n / 2).astype(int)
+        # Plot regions with outliers
+        # plot_variables(ma_data, outlier_info)
 
-        for obs in range(len(y_group)):
-            y = y_group[obs]
-
-            mu = np.zeros(n)
-            mu[0] = np.mean(y[1:block])
-            mu[n - 1] = np.mean(y[n - 1 - block:n - 1])
-            for i in range(1, n - 1):
-                if i < block:
-                    mu[i] = np.mean(np.concatenate((y[:i], y[i + 1:i + 1 + block])))
-                elif i + 1 + block > n - 1:
-                    mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:])))
-                else:
-                    mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:i + 1 + block])))
-
-            obs_sd = np.std(y)
-            if np.any(y > mu + sd * obs_sd) or np.any(y < mu - sd * obs_sd):
-                data = data[~data['Region'].isin([group_names[obs]])]
-                outlier_names.append(group_names[obs])
-                outlier_data.append([y, mu, sd])
+        # Plot regions after removing outliers, moving average/sd change after removing outliers,
+        # so new outliers might appear
+        # ma_data_01, group_names_01, outliers_01 = get_outliers(data, threshold)
+        # plot_variables(ma_data_01, outlier_info)
 
     # Drop regions that cause trouble.
     # data = data[~data['Region'].isin(['NL226_340', 'NL329_340', 'NL328_501', 'NL225_509'])]
-    return data, outlier_data, outlier_names
+    return data
+
+
+def get_outliers(data: pd.DataFrame, threshold: int):
+    """
+        Calculates moving average data (sales, moving average, standard deviation) per region and detects outliers
+
+        :param data: data
+        :param threshold: number of standard deviations away from moving average to be considered an outlier
+        :return: moving average data, region names, list of outliers indices
+        """
+
+    grouped = data.groupby('Region', sort=False)
+    group_names = [name for name, group in grouped]
+    group_list = [group for name, group in grouped]
+
+    # Collect grouped y and x values in a list.
+    y_group = [group['SalesGoodsEUR'].to_numpy() for group in group_list]
+    n = len(y_group[0])
+    block = np.ceil(0.25 * n / 2).astype(int)
+
+    ma_data = []
+    outliers = []
+    for obs in range(len(y_group)):
+        y = y_group[obs]
+
+        mu = np.zeros(n)
+        mu[0] = np.mean(y[1:block])
+        mu[n - 1] = np.mean(y[n - 1 - block:n - 1])
+        for i in range(1, n - 1):
+            if i < block:
+                mu[i] = np.mean(np.concatenate((y[:i], y[i + 1:i + 1 + block])))
+            elif i + 1 + block > n - 1:
+                mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:])))
+            else:
+                mu[i] = np.mean(np.concatenate((y[i - block:i], y[i + 1:i + 1 + block])))
+
+        obs_sd = np.std(y)
+        ma_data.append([y, mu, threshold, obs_sd])
+        outliers.append(np.where(np.absolute(y - mu) > threshold * obs_sd))
+    return ma_data, group_names, outliers
+
+
+def get_date(data: pd.DataFrame, index: int):
+    """
+        Transforms index into date
+
+        :param index: index of outlier in y_group
+        :param data: data
+        :return: yearweek value of outlier
+        """
+
+    dt = (data['index'].iloc[0] + datetime.timedelta(weeks=index)).strftime('%G%V')
+    return dt
 
 
 def load_transaction(filepath: str):
@@ -239,6 +270,18 @@ def load_tracker(filepath: str):
         {'StringencyIndex': 'mean', 'GovernmentResponseIndex': 'mean', 'ContainmentHealthIndex': 'mean',
          'EconomicSupportIndex': 'mean'})
     tracker_weekly.index = pd.to_datetime(tracker_weekly.index, format='%Y-%m-%d').strftime('%G%V')
+
+    # Set highest_index to maximum of StringencyIndex + 0.01,
+    # otherwise math.floor() will add an extra category for the largest StringencyIndex
+    highest_index = tracker_weekly['StringencyIndex'].max() + 0.01
+    number_of_categories = 5
+    category_size = highest_index/number_of_categories
+
+    for idx, row in tracker_weekly.iterrows():
+        if not math.isnan(tracker_weekly.loc[idx, 'StringencyIndex']):
+            # Transform StringencyIndex in categorical variable
+            tracker_weekly.at[idx, 'StringencyIndex'] \
+                = math.floor(tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
 
     # Get first difference of stringency index.
     tracker_weekly['StringencyIndexDiff'] = tracker_weekly['StringencyIndex'].diff()

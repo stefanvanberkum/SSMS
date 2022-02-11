@@ -103,16 +103,16 @@ def print_results(results: MLEResults, save_path: str, name: str):
             out.write(line + '\n')
 
 
-def plot_variables(data: list, data_names: list, sd: float):
-    if data_names:
-        print(f'Regions with outliers: {data_names}')
+def plot_variables(data: list, info: list):
+    if info:
         t = np.arange(1, len(data[0][0]) + 1)
-        for i in range(len(data_names)):
+        for i in range(len(info)):
+            index = info[i][0]
             plt.figure()
-            plt.suptitle(data_names[i])
-            plt.plot(t, data[i][0], 'b')
-            plt.plot(t, data[i][1] + sd * data[i][2], 'r')
-            plt.plot(t, data[i][1] - sd * data[i][2], 'r')
+            plt.suptitle(info[i][1])
+            plt.plot(t, data[index][0], 'b')
+            plt.plot(t, data[index][1] + data[index][2] * data[index][3], 'r')
+            plt.plot(t, data[index][1] - data[index][2] * data[index][3], 'r')
     else:
         print('No outliers')
     plt.show()
