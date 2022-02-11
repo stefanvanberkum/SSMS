@@ -2,17 +2,17 @@
 This module provides functions for loading and formatting the data.
 """
 
-import datetime
-import math
 import os
 from datetime import date
 from utils import plot_variables
 
 import numpy as np
 import pandas as pd
+import datetime
+import math
 
 
-def load_data(filepath: str, drop_outliers=True, threshold=6):
+def load_data(filepath: str, drop_outliers=False, threshold=6):
     """
     Load the required data.
 
@@ -290,13 +290,13 @@ def load_tracker(filepath: str):
     # otherwise math.floor() will add an extra category for the largest StringencyIndex
     highest_index = tracker_weekly['StringencyIndex'].max() + 0.01
     number_of_categories = 5
-    category_size = highest_index / number_of_categories
+    category_size = highest_index/number_of_categories
 
     for idx, row in tracker_weekly.iterrows():
         if not math.isnan(tracker_weekly.loc[idx, 'StringencyIndex']):
             # Transform StringencyIndex in categorical variable
-            tracker_weekly.at[idx, 'StringencyIndex'] = math.floor(
-                tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
+            tracker_weekly.at[idx, 'StringencyIndex'] \
+                = math.floor(tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
 
     # Get first difference of stringency index.
     tracker_weekly['StringencyIndexDiff'] = tracker_weekly['StringencyIndex'].diff()
