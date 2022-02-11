@@ -104,6 +104,13 @@ def print_results(results: MLEResults, save_path: str, name: str):
 
 
 def plot_variables(data: list, info: list):
+    """
+    Plots variables.
+
+    :param data: list of form [y, mu, threshold, obs_sd]
+    :param info: list of from [index, name]
+    :return:
+    """
     if info:
         t = np.arange(1, len(data[0][0]) + 1)
         for i in range(len(info)):

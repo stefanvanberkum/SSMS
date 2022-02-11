@@ -25,7 +25,7 @@ def main():
 
     start_time = time.time()
 
-    data, outlier_data, outlier_names = load_data(data_path)
+    data = load_data(data_path)
     # test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
 
     z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',

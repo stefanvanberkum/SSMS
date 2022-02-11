@@ -2,17 +2,16 @@
 This module provides functions for loading and formatting the data.
 """
 
+import datetime
+import math
 import os
 from datetime import date
-from utils import plot_variables
 
 import numpy as np
 import pandas as pd
-import datetime
-import math
 
 
-def load_data(filepath: str, drop_outliers=False, threshold=6):
+def load_data(filepath: str, drop_outliers=True, threshold=6):
     """
     Load the required data.
 
@@ -60,8 +59,10 @@ def load_data(filepath: str, drop_outliers=False, threshold=6):
                 post_index = int(outliers[region_index][0][outliers[region_index][0].size - 1] + 1)
                 pre_date = get_date(data, pre_index)
                 post_date = get_date(data, post_index)
-                pre_sales = data.loc[(data.index == pre_date) & (data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'].values[0]
-                post_sales = data.loc[(data.index == post_date) & (data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'].values[0]
+                pre_sales = data.loc[(data.index == pre_date) & (
+                    data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'].values[0]
+                post_sales = data.loc[(data.index == post_date) & (
+                    data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'].values[0]
                 # Each outlier in SalesGoodsEUR is replaced with new_sales
                 new_sales = (pre_sales + post_sales) / 2
                 for j in outliers[region_index][0]:
@@ -69,18 +70,17 @@ def load_data(filepath: str, drop_outliers=False, threshold=6):
                     if outliers[region_index][0].size > 0:
                         outlier_value = ma_data[region_index][0][j]
                         outlier_size = abs(ma_data[region_index][0][j] - ma_data[region_index][1][j])
-                        print(f'{group_names[region_index]} ({get_date(data, int(j))}): {outlier_value}, {outlier_size}')
+                        print(
+                            f'{group_names[region_index]} ({get_date(data, int(j))}): {outlier_value}, {outlier_size}')
                     data.loc[(data.index == get_date(data, int(j))) & (
                         data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'] = new_sales
                 print()
 
-        # Plot regions with outliers
-        # plot_variables(ma_data, outlier_info)
+        # Plot regions with outliers  # plot_variables(ma_data, outlier_info)
 
-        # Plot regions after removing outliers, moving average/sd change after removing outliers,
-        # so new outliers might appear
-        # ma_data_01, group_names_01, outliers_01 = get_outliers(data, threshold)
-        # plot_variables(ma_data_01, outlier_info)
+        # Plot regions after removing outliers, moving average/sd change after removing outliers,  # so new outliers
+        # might appear  # ma_data_01, group_names_01, outliers_01 = get_outliers(data, threshold)  # plot_variables(
+        # ma_data_01, outlier_info)
 
     # Drop regions that cause trouble.
     # data = data[~data['Region'].isin(['NL226_340', 'NL329_340', 'NL328_501', 'NL225_509'])]
@@ -275,13 +275,13 @@ def load_tracker(filepath: str):
     # otherwise math.floor() will add an extra category for the largest StringencyIndex
     highest_index = tracker_weekly['StringencyIndex'].max() + 0.01
     number_of_categories = 5
-    category_size = highest_index/number_of_categories
+    category_size = highest_index / number_of_categories
 
     for idx, row in tracker_weekly.iterrows():
         if not math.isnan(tracker_weekly.loc[idx, 'StringencyIndex']):
             # Transform StringencyIndex in categorical variable
-            tracker_weekly.at[idx, 'StringencyIndex'] \
-                = math.floor(tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
+            tracker_weekly.at[idx, 'StringencyIndex'] = math.floor(
+                tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
 
     # Get first difference of stringency index.
     tracker_weekly['StringencyIndexDiff'] = tracker_weekly['StringencyIndex'].diff()
