@@ -6,8 +6,6 @@ import datetime
 import math
 import os
 from datetime import date
-from utils import plot_variables
-from matplotlib import pyplot as plt
 
 import numpy as np
 import pandas as pd
@@ -294,7 +292,7 @@ def load_tracker(filepath: str):
     highest_index = 100
     number_of_categories = 3
     # category_size is divided by number_of_categories - 1, since 0 is already one category
-    category_size = highest_index/(number_of_categories - 1)
+    category_size = highest_index / (number_of_categories - 1)
     # print(f'Category size: {category_size}')
     #
     # plt.figure()
@@ -306,8 +304,8 @@ def load_tracker(filepath: str):
     for idx, row in tracker_weekly.iterrows():
         if not math.isnan(tracker_weekly.loc[idx, 'StringencyIndex']):
             # Transform StringencyIndex in categorical variable
-            tracker_weekly.at[idx, 'StringencyIndex'] \
-                = math.ceil(tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
+            tracker_weekly.at[idx, 'StringencyIndex'] = math.ceil(
+                tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
 
     # for i in range(number_of_categories):
     #     group_size = tracker_weekly[tracker_weekly['StringencyIndex'] == i].shape[0]
