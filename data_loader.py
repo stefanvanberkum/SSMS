@@ -6,6 +6,8 @@ import datetime
 import math
 import os
 from datetime import date
+from utils import plot_variables
+from matplotlib import pyplot as plt
 
 import numpy as np
 import pandas as pd
@@ -16,8 +18,8 @@ def load_data(filepath: str, drop_outliers=True, threshold=10):
     Load the required data.
 
     :param filepath: the location of the files
-    :param drop_outliers: whether or not to drop outliers, default is False
-    :param threshold: number of standard deviations away from moving average to be considered an outlier, default is 6
+    :param drop_outliers: whether or not to drop outliers, default is True
+    :param threshold: number of standard deviations away from moving average to be considered an outlier, default is 10
     :return: formatted data
     """
 
@@ -288,17 +290,35 @@ def load_tracker(filepath: str):
          'EconomicSupportIndex': 'mean'})
     tracker_weekly.index = pd.to_datetime(tracker_weekly.index, format='%Y-%m-%d').strftime('%G%V')
 
-    # Set highest_index to maximum of StringencyIndex + 0.01,
-    # otherwise math.floor() will add an extra category for the largest StringencyIndex
-    highest_index = tracker_weekly['StringencyIndex'].max() + 0.01
-    number_of_categories = 5
-    category_size = highest_index / number_of_categories
+    # highest_index = tracker_weekly['StringencyIndex'].max()
+    highest_index = 100
+    number_of_categories = 3
+    # category_size is divided by number_of_categories - 1, since 0 is already one category
+    category_size = highest_index/(number_of_categories - 1)
+    # print(f'Category size: {category_size}')
+    #
+    # plt.figure()
+    # plt.title(f'StringencyIndex as continuous variable')
+    # plt.xlabel("Time")
+    # plt.ylabel("StringencyIndex")
+    # plt.plot(tracker_weekly.reset_index().index, tracker_weekly['StringencyIndex'])
 
     for idx, row in tracker_weekly.iterrows():
         if not math.isnan(tracker_weekly.loc[idx, 'StringencyIndex']):
             # Transform StringencyIndex in categorical variable
-            tracker_weekly.at[idx, 'StringencyIndex'] = math.floor(
-                tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
+            tracker_weekly.at[idx, 'StringencyIndex'] \
+                = math.ceil(tracker_weekly.loc[idx, 'StringencyIndex'] / category_size)
+
+    # for i in range(number_of_categories):
+    #     group_size = tracker_weekly[tracker_weekly['StringencyIndex'] == i].shape[0]
+    #     print(f'Number of observations in group {i}: {group_size}')
+    #
+    # plt.figure()
+    # plt.title(f'StringencyIndex with {number_of_categories} categories')
+    # plt.xlabel("Time")
+    # plt.ylabel("StringencyIndex")
+    # plt.plot(tracker_weekly.reset_index().index, tracker_weekly['StringencyIndex'])
+    # plt.show()
 
     # Get first difference of stringency index.
     tracker_weekly['StringencyIndexDiff'] = tracker_weekly['StringencyIndex'].diff()
