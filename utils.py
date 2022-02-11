@@ -7,12 +7,13 @@ import numpy as np
 from matplotlib import pyplot as plt
 from statsmodels.tsa.statespace.mlemodel import MLEResults
 
-from state_space import SSMS
+from state_space import SSMS, SSMS_alt
 
 
 def print_results(results: MLEResults, save_path: str, name: str):
     """
-    Pretty-prints the results for an SSMS model with one c/state intercept variable. Assumes n > k.
+    Pretty-prints the results for an SSMS model with n + k variables of interest (n in either sales or mu,
+    k in beta equations). Assumes n > k.
 
     :param results: results object for an SSMS model
     :param save_path: path to save location
@@ -20,11 +21,14 @@ def print_results(results: MLEResults, save_path: str, name: str):
     :return:
     """
     model = results.model
-    if not isinstance(model, SSMS):
+    if not (isinstance(model, SSMS) or isinstance(model, SSMS_alt)):
         print("Can't print parameters for a non-SSMS model.")
         return
-    if np.size(model.exog, axis=1) != 1:
+    if isinstance(model, SSMS) and np.size(model.exog, axis=1) != 1:
         print("Can't print a model that does not have exactly one c/state intercept variable.")
+        return
+    if isinstance(model, SSMS_alt) and np.size(model.exog, axis=1) != 2:
+        print("Can't print a model that does not have exactly one d/obs intercept and one c/state intercept variable.")
         return
 
     # Print AIC, BIC, MSE, and MAE.
@@ -41,6 +45,7 @@ def print_results(results: MLEResults, save_path: str, name: str):
 
     n = len(regions)
     k = model.k
+    n_cov = model.n_cov
 
     param_from = 0
     param_to = n
@@ -55,39 +60,28 @@ def print_results(results: MLEResults, save_path: str, name: str):
     l2_se = ses[param_from:param_to]
     l2_p = pvalues[param_from:param_to]
 
-    y = ','.join(['region', 'var (y)', 'cov (y)'])
+    y = ','.join(['region', 'var (y)'])
     l1 = ','.join(['lambda_1', 'se', 'p-value'])
-    mu = ','.join(['var (mu)', 'cov (mu)'])
-    nu = ','.join(['var (nu)', 'cov (nu)'])
+    mu = 'var (mu)'
+    nu = 'var (nu)'
     l2 = ','.join(['param', 'lambda_2', 'se', 'p-value', 'var'])
     header = ',,'.join([y, l1, mu, nu, l2])
 
     param_from = param_to
-    if model.cov_rest == 'RC':
-        param_to += n + 1
+    if model.cov_rest == 'GC':
+        param_to += n + n_cov
         y_var = params[param_from:param_from + n]
-        y_cov = params[param_to - 1]
     else:
         param_to += n
         y_var = params[param_from:param_to]
 
     param_from = param_to
-    if model.cov_rest == 'IDE':
-        param_to += n
-        mu_var = params[param_from:param_to]
-    else:
-        param_to += n + 1
-        mu_var = params[param_from:param_from + n]
-        mu_cov = params[param_to - 1]
+    param_to += n
+    mu_var = params[param_from:param_to]
 
     param_from = param_to
-    if model.cov_rest == 'IDE':
-        param_to += n
-        nu_var = params[param_from:param_to]
-    else:
-        param_to += n + 1
-        nu_var = params[param_from:param_from + n]
-        nu_cov = params[param_to - 1]
+    param_to += n
+    nu_var = params[param_from:param_to]
 
     param_from = param_to
     param_to += k
@@ -98,23 +92,9 @@ def print_results(results: MLEResults, save_path: str, name: str):
 
         for i in range(n):
             y = ','.join([regions[i], str(y_var[i])])
+            mu = str(mu_var[i])
+            nu = str(nu_var[i])
             l1 = ','.join([str(lambda_1[i]), str(l1_se[i]), str(l1_p[i])])
-
-            if i == 0:
-                if model.cov_rest == 'RC':
-                    y = ','.join([y, str(y_cov)])
-                else:
-                    y = ','.join([y, '0'])
-                if model.cov_rest == 'IDE':
-                    mu = ','.join([str(mu_var[i]), '0'])
-                    nu = ','.join([str(nu_var[i]), '0'])
-                else:
-                    mu = ','.join([str(mu_var[i]), str(mu_cov)])
-                    nu = ','.join([str(nu_var[i]), str(nu_cov)])
-            else:
-                y = ','.join([y, ''])
-                mu = ','.join([str(mu_var[i]), ''])
-                nu = ','.join([str(nu_var[i]), ''])
             line = ',,'.join([y, l1, mu, nu])
 
             if i < k:

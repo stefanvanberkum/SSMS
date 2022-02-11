@@ -9,18 +9,13 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from data_loader import load_data
-from state_space import SSMS
+from state_space import SSMS, SSMS_alt
 from utils import print_results
 
 """
 TODO:
-- Parameter printing (standard errors + p-values?)
 - State printing
 - Forecasting (train/test)
-- SE
-    - Full sample
-    - Bootstrap
-    - Sample + bootstrap
 """
 
 
@@ -30,99 +25,104 @@ def main():
 
     start_time = time.time()
 
-    # data, outlier_data, outlier_names = load_data(data_path)
+    data, outlier_data, outlier_names = load_data(data_path)
     # test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
 
     z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
                '50-75_nbrpromos_index_201801']
+    d_names = ['StringencyIndex']
     c_names = ['StringencyIndexDiff']
     var_start = 1
     cov_start = 0
-    cov_rests = ['RC', 'IDO', 'IDE']
+    cov_rests = ['GC', 'IDE']
+    cov_group = 'nuts3_code'
     cov_type = 'oim'
 
     # model = SSMS(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
-    #             cov_rest='IDE', var_start=1, cov_start=0, fancy_start=True)
+    #             cov_rest='GC', cov_group='nuts3_code', var_start=1, cov_start=0, fancy_start=True)
     # initial = model.fit(maxiter=1000, maxfun=1000000)
     # result = model.fit(initial.params, method='nm', maxiter=200000)
     # initial = model.fit(method='nm', maxiter=20000)
     # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
-    # result = model.fit(maxiter=1000, maxfun=1000000)
+    # result = model.fit(maxiter=1000, maxfun=1000000, cov_type='oim')
     # print(result.summary())
     # print_results(result, save_path, 'test')
     # exit(0)
 
-    # Contaminated data.
-    contaminated_data, _, _ = load_data(data_path)
+    for cov_rest in cov_rests:
+        for alt in [False, True]:
+            if cov_rest == 'GC':
+                cov_starts = [0, 0.001, 0.01]
+            else:
+                cov_starts = [0]
+            for cov_start in cov_starts:
+                if alt:
+                    print("Running " + cov_rest + "...")
+                    split_time = time.time()
 
-    # Clean data.
-    clean_data, outlier_data_6sd, outlier_names_6sd = load_data(data_path, True, 6)
+                    model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
+                                 cov_rest=cov_rest, cov_group=cov_group, var_start=var_start, cov_start=cov_start,
+                                 fancy_start=True)
+                    result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type)
+                else:
+                    print("Running " + cov_rest + "-alt...")
+                    split_time = time.time()
 
-    # Extra clean data.
-    extra_clean_data, outlier_data_4sd, outlier_names_4sd = load_data(data_path, True, 4)
+                    model = SSMS_alt(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names,
+                                     d_names=d_names, c_names=c_names, cov_rest=cov_rest, cov_group=cov_group,
+                                     var_start=var_start, cov_start=cov_start, fancy_start=True)
+                    result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type)
 
-    data_options = {'contaminated': contaminated_data, 'clean': clean_data, 'extra clean': extra_clean_data}
+                # Make sure to plot the same regions each time.
+                grouped = data.groupby('Region', sort=False)
+                group_names = [name for name, group in grouped]
+                region_1 = group_names.index('NL310_503')
+                region_2 = group_names.index('NL33C_340')
+                region_3 = group_names.index('NL33C_506')
+                region_4 = group_names.index('NL212_507')
 
-    for data_type in data_options:
-        data = data_options[data_type]
-        for cov_rest in cov_rests:
-            print("Running " + cov_rest + " with " + data_type + " data...")
-            split_time = time.time()
+                y_pred = result.get_prediction(start=10, end=190)
+                y1_pred = y_pred.predicted_mean[:, region_1]
+                y2_pred = y_pred.predicted_mean[:, region_2]
+                y3_pred = y_pred.predicted_mean[:, region_3]
+                y4_pred = y_pred.predicted_mean[:, region_4]
+                mse_1 = np.mean(np.square(model.endog[10:, region_1] - y1_pred))
+                mse_2 = np.mean(np.square(model.endog[10:, region_2] - y2_pred))
+                mse_3 = np.mean(np.square(model.endog[10:, region_3] - y3_pred))
+                mse_4 = np.mean(np.square(model.endog[10:, region_4] - y4_pred))
 
-            model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
-                         cov_rest=cov_rest, var_start=var_start, cov_start=cov_start, fancy_start=True)
-            result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type, disp=-1)
+                mses = np.zeros(len(group_names))
+                for region in range(len(group_names)):
+                    mses[region] = np.mean(np.square(model.endog[10:, region] - y_pred.predicted_mean[:, region]))
+                mse = np.mean(mses)
 
-            # Make sure to plot the same regions each time.
-            grouped = data.groupby('Region', sort=False)
-            group_names = [name for name, group in grouped]
-            region_1 = group_names.index('NL310_503')
-            region_2 = group_names.index('NL33C_340')
-            region_3 = group_names.index('NL33C_506')
-            region_4 = group_names.index('NL212_507')
+                t = np.arange(11, 192)
+                fig, axes = plt.subplots(2, 2)
+                axes[0, 0].set_title('mse: {0}'.format(format(mse_1, '.4f')))
+                axes[0, 0].set_xticks([])
+                axes[0, 0].plot(t, model.endog[10:, region_1], 'b')
+                axes[0, 0].plot(t, y1_pred, 'r')
+                axes[0, 1].set_title('mse: {0}'.format(format(mse_2, '.4f')))
+                axes[0, 1].set_xticks([])
+                axes[0, 1].plot(t, model.endog[10:, region_2], 'b')
+                axes[0, 1].plot(t, y2_pred, 'r')
+                axes[1, 0].set_title('mse: {0}'.format(format(mse_3, '.4f')))
+                axes[1, 0].plot(t, model.endog[10:, region_3], 'b')
+                axes[1, 0].plot(t, y3_pred, 'r')
+                axes[1, 1].set_title('mse: {0}'.format(format(mse_4, '.4f')))
+                axes[1, 1].plot(t, model.endog[10:, region_4], 'b')
+                axes[1, 1].plot(t, y4_pred, 'r')
+                name = '_'.join([cov_rest, alt, cov_start])
+                fig.suptitle('{0} (mse: {1})'.format(name, format(mse, '.4f')))
+                plt.savefig(os.path.join(save_path, name), dpi=300, format='png')
+                plt.close('all')
 
-            y_pred = result.get_prediction(start=10, end=190)
-            y1_pred = y_pred.predicted_mean[:, region_1]
-            y2_pred = y_pred.predicted_mean[:, region_2]
-            y3_pred = y_pred.predicted_mean[:, region_3]
-            y4_pred = y_pred.predicted_mean[:, region_4]
-            mse_1 = np.mean(np.square(model.endog[10:, region_1] - y1_pred))
-            mse_2 = np.mean(np.square(model.endog[10:, region_2] - y2_pred))
-            mse_3 = np.mean(np.square(model.endog[10:, region_3] - y3_pred))
-            mse_4 = np.mean(np.square(model.endog[10:, region_4] - y4_pred))
+                print_results(result, save_path, name)
+                result.save(os.path.join(save_path, name + '.pickle'))
 
-            mses = np.zeros(len(group_names))
-            for region in range(len(group_names)):
-                mses[region] = np.mean(np.square(model.endog[10:, region] - y_pred.predicted_mean[:, region]))
-            mse = np.mean(mses)
-
-            t = np.arange(11, 192)
-            fig, axes = plt.subplots(2, 2)
-            axes[0, 0].set_title('mse: {0}'.format(format(mse_1, '.4f')))
-            axes[0, 0].set_xticks([])
-            axes[0, 0].plot(t, model.endog[10:, region_1], 'b')
-            axes[0, 0].plot(t, y1_pred, 'r')
-            axes[0, 1].set_title('mse: {0}'.format(format(mse_2, '.4f')))
-            axes[0, 1].set_xticks([])
-            axes[0, 1].plot(t, model.endog[10:, region_2], 'b')
-            axes[0, 1].plot(t, y2_pred, 'r')
-            axes[1, 0].set_title('mse: {0}'.format(format(mse_3, '.4f')))
-            axes[1, 0].plot(t, model.endog[10:, region_3], 'b')
-            axes[1, 0].plot(t, y3_pred, 'r')
-            axes[1, 1].set_title('mse: {0}'.format(format(mse_4, '.4f')))
-            axes[1, 1].plot(t, model.endog[10:, region_4], 'b')
-            axes[1, 1].plot(t, y4_pred, 'r')
-            name = '_'.join([cov_rest, data_type])
-            fig.suptitle('{0} (mse: {1})'.format(name, format(mse, '.4f')))
-            plt.savefig(os.path.join(save_path, name), dpi=300, format='png')
-            plt.close('all')
-
-            print_results(result, save_path, name)
-            result.save(os.path.join(save_path, name + '.pickle'))
-
-            print("Done!")
-            end_time = time.time()
-            print("Runtime:", (end_time - split_time), sep=' ')
+                print("Done!")
+                end_time = time.time()
+                print("Runtime:", (end_time - split_time), sep=' ')
     end_time = time.time()
     print("Total runtime:", (end_time - start_time), sep=' ')
 
