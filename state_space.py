@@ -50,8 +50,9 @@ class SSMS(sm.tsa.statespace.MLEModel):
         self.k_c = len(c_names)
 
         n_cov = 0
-        for group in cov_counts:
-            n_cov += math.comb(group, 2)
+        if cov_group != '':
+            for group in cov_counts:
+                n_cov += math.comb(group, 2)
         self.n_cov = n_cov
 
         self.group_names = group_names
@@ -352,8 +353,9 @@ class SSMS_alt(sm.tsa.statespace.MLEModel):
         self.k_c = len(c_names)
 
         n_cov = 0
-        for group in cov_counts:
-            n_cov += math.comb(group, 2)
+        if cov_group != '':
+            for group in cov_counts:
+                n_cov += math.comb(group, 2)
         self.n_cov = n_cov
 
         self.group_names = group_names
@@ -663,8 +665,9 @@ def construct_arrays(data: pd.DataFrame, group_name: str, y_name: str, z_names: 
 
     # Construct covariance group mapping.
     cov_groups = np.zeros(len(group_list), dtype=int)
+    cov_counts = None
     if cov_group != '':
-        cov_grouping = np.array([group.loc['201801'][cov_group] for group in group_list])
+        cov_grouping = np.array([group.iloc[0][cov_group] for group in group_list])
         cov_names = np.unique(cov_grouping)
         cov_counts = np.zeros(len(cov_names), dtype=int)
         group_dict = {}
