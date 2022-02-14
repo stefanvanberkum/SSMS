@@ -9,8 +9,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from data_loader import load_data
-from state_space import SSMS, SSMS_alt
-from utils import print_results
+from state_space import SSMS, SSMS_alt, SSMS_alt_4
+from utils import print_results, print_results_alt
 
 """
 TODO:
@@ -29,12 +29,12 @@ def main():
     train_data = data[:63 * 153]
     test_data = data[63 * 153:]
     # test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
-    # test_data = data[data['Region'].isin(
-    #    ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
-    #     'NL414_511', 'NL332_505'])]
+    test_data = data[data['Region'].isin(
+        ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
+         'NL414_511', 'NL332_505'])]
 
     z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
-               '50-75_nbrpromos_index_201801']
+               '50-75_nbrpromos_index_201801', 'StringencyIndex']
     d_names = ['StringencyIndex']
     c_names = ['StringencyIndexDiff']
     var_start = 1
@@ -44,16 +44,27 @@ def main():
     cov_type = 'oim'
     alts = [False]
 
-    # model = SSMS(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
-    #             cov_rest='IDE')
+    # model_selection_alt(train_data)
+    # exit(0)
+
+    model = SSMS_alt_4(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE',
+                       cov_group=cov_group)
     # initial = model.fit(maxiter=1000, maxfun=1000000)
-    # result = model.fit(initial.params, method='nm', maxiter=200000)
+    # result = model.fit(initial.params, method='nm', maxiter=200000, cov_type='oim')
     # initial = model.fit(method='nm', maxiter=20000)
     # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
-    # result = model.fit(maxiter=1000, maxfun=1000000, cov_type='oim')
-    # print(result.summary())
+    result = model.fit(maxiter=1000, maxfun=1000000, cov_type='oim')
+    print(result.summary())
+    print_results_alt(result, save_path, 'test')
+    exit(0)
     # print_results(result, save_path, 'test')
-    # exit(0)
+    filtered = result.states.filtered[:, 20:]
+    for i in range(len(z_names)):
+        plt.plot(filtered[15:, i])
+        plt.suptitle(z_names[i])
+        plt.show()
+        plt.close('all')
+    exit(0)
 
     # run_exploratory(train_data, save_path)
     select_variables(train_data)
@@ -210,6 +221,95 @@ def select_variables(data):
             z_copy = z_names.copy()
             z_copy.remove(z_name)
             aic = select(z_copy)
+
+            if aic < best_aic:
+                best_aic = aic
+                best_rest = z_name
+        if best_rest != '':
+            print("Best restriction: " + best_rest)
+            z_names.remove(best_rest)
+        else:
+            break
+    name = ', '.join(z_names)
+    print("Best parameter set: " + name)
+
+
+def model_selection_alt(data):
+    """
+    Runs model selection.
+
+    :param data: the dataset
+    :return:
+    """
+
+    z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
+               '50-75_nbrpromos_index_201801', 'StringencyIndex']
+    cov_rests = ['GC', 'IDE']
+    cov_group = 'nuts3_code'
+    cov_type = 'oim'
+
+    def model_select(params: list):
+        """
+        Runs a possible model specification.
+
+        :param params: a list of form [cov_rest, cov_start]
+        :return: the AIC
+        """
+        model_name = '_'.join([params[0], str(params[1])])
+        print("Running " + model_name + "...")
+        split_time = time.time()
+        model = SSMS_alt_4(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest=params[0],
+                           cov_start=params[1], cov_group=cov_group)
+        result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type, disp=-1)
+
+        print("Done!")
+        end_time = time.time()
+        print("Runtime:", (end_time - split_time), sep=' ')
+        return result.aic
+
+    def param_select(params: list, model_type: list):
+        """
+        Runs a possible model specification.
+
+        :param params: a list of the parameters to be used
+        :param model_type: a list of form [cov_rest, cov_start]
+        :return: the AIC
+        """
+        model_name = ', '.join(params)
+        print("Running with: " + model_name + "...")
+        split_time = time.time()
+        model = SSMS_alt_4(data, group_name='Region', y_name='SalesGoodsEUR', z_names=params, cov_rest=model_type[0],
+                           cov_start=model_type[1], cov_group=cov_group)
+        result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type, disp=-1)
+
+        print("Done!")
+        end_time = time.time()
+        print("Runtime:", (end_time - split_time), sep=' ')
+        return result.aic
+
+    best_aic = np.inf
+    best_type = [None, None]
+    for cov_rest in cov_rests:
+        if cov_rest == 'GC':
+            cov_starts = [0, 0.001, 0.01]
+        else:
+            cov_starts = [0]
+        for cov_start in cov_starts:
+            aic = model_select([cov_rest, cov_start])
+            if aic < best_aic:
+                best_aic = aic
+                best_type[0] = cov_rest
+                best_type[1] = cov_start
+    name = '_'.join([best_type[0], str(best_type[1])])
+    print("Best type: " + name)
+
+    # Run exploratory analysis.
+    while len(z_names) > 1:
+        best_rest = ''
+        for z_name in z_names:
+            z_copy = z_names.copy()
+            z_copy.remove(z_name)
+            aic = param_select(z_copy, best_type)
 
             if aic < best_aic:
                 best_aic = aic

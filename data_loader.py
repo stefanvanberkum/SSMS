@@ -290,7 +290,7 @@ def load_tracker(filepath: str):
 
     # highest_index = tracker_weekly['StringencyIndex'].max()
     highest_index = 100
-    number_of_categories = 3
+    number_of_categories = 5
     # category_size is divided by number_of_categories - 1, since 0 is already one category
     category_size = highest_index / (number_of_categories - 1)
     # print(f'Category size: {category_size}')
