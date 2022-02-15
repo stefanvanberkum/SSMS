@@ -126,8 +126,6 @@ def print_results_alt(results: MLEResults, save_path: str, name: str):
     # Print fitted parameters, standard errors, and p-values.
     regions = model.group_names
     params = results.params
-    ses = results.bse
-    pvalues = results.pvalues
 
     n = len(regions)
     k = model.k

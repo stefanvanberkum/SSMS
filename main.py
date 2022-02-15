@@ -28,13 +28,14 @@ def main():
     data = load_data(data_path)
     train_data = data[:63 * 153]
     test_data = data[63 * 153:]
-    # test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
-    test_data = data[data['Region'].isin(
-        ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
-         'NL414_511', 'NL332_505'])]
+    test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
+    # test_data = data[data['Region'].isin(
+    #    ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
+    #     'NL414_511', 'NL332_505'])]
 
-    z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
-               '50-75_nbrpromos_index_201801', 'StringencyIndex']
+    # z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
+    #           '50-75_nbrpromos_index_201801', 'StringencyIndex']
+    z_names = ['WVO', 'StringencyIndex']
     d_names = ['StringencyIndex']
     c_names = ['StringencyIndexDiff']
     var_start = 1
@@ -47,15 +48,19 @@ def main():
     # model_selection_alt(train_data)
     # exit(0)
 
-    model = SSMS_alt_4(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE',
-                       cov_group=cov_group)
+    model = SSMS_alt_4(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
     # initial = model.fit(maxiter=1000, maxfun=1000000)
     # result = model.fit(initial.params, method='nm', maxiter=200000, cov_type='oim')
     # initial = model.fit(method='nm', maxiter=20000)
     # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
-    result = model.fit(maxiter=1000, maxfun=1000000, cov_type='oim')
-    print(result.summary())
-    print_results_alt(result, save_path, 'test')
+    result = model.fit(maxiter=100000, maxfun=100000000, cov_type='oim')
+    exit(0)
+    print_results_alt(result, save_path, 'result')
+    result.save(os.path.join(save_path, 'result.pickle'))
+
+    end_time = time.time()
+    print("Total runtime:", (end_time - start_time), sep=' ')
+
     exit(0)
     # print_results(result, save_path, 'test')
     filtered = result.states.filtered[:, 20:]
@@ -65,12 +70,6 @@ def main():
         plt.show()
         plt.close('all')
     exit(0)
-
-    # run_exploratory(train_data, save_path)
-    select_variables(train_data)
-
-    end_time = time.time()
-    print("Total runtime:", (end_time - start_time), sep=' ')
 
 
 def run_exploratory(data, save_path):

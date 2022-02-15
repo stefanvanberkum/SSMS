@@ -1393,7 +1393,7 @@ class SSMS_alt_4(sm.tsa.statespace.MLEModel):
         """
 
         # Force covariances to be positive.
-        constrained = unconstrained ** 2
+        constrained = unconstrained.copy() ** 2
         return constrained
 
     def untransform_params(self, constrained):
@@ -1405,7 +1405,7 @@ class SSMS_alt_4(sm.tsa.statespace.MLEModel):
         """
 
         # Force covariances to be positive.
-        unconstrained = constrained ** 0.5
+        unconstrained = constrained.copy() ** 0.5
         return unconstrained
 
     def update(self, params, **kwargs):
