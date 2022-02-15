@@ -4,6 +4,7 @@ This module provides utility methods.
 import os
 
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 from statsmodels.tsa.statespace.mlemodel import MLEResults
 
@@ -208,3 +209,25 @@ def plot_variables(data: list, info: list, all_regions: False):
         else:
             print('No outliers')
         plt.show()
+
+
+def prepare_forecast(results: MLEResults, data: pd.DataFrame):
+    """
+    Prepares a new MLEResults object, such that regular methods can be used to compute forecasts. For out-of-sample
+    forecasts, we can simply use 'in-sample' forecasts of a model with fixed parameters, obtained from the initial fit.
+
+    :param results: the MLEResults object of the training fit
+    :param data: the extended data (train + test)
+    :return: a new NLEResults object, fitted with fixed parameters obtained from the initial training fit
+    """
+
+    model = results.model
+    if not isinstance(model, SSMS_alt_4):
+        print("Can't prepare forecasts for a non-SSMS model.")
+        return
+
+    new_model = SSMS_alt_4(data, group_name=model.group_name, y_name=model.y_name, z_names=model.z_names,
+                           cov_rest=model.cov_rest)
+    fitted_params = results.params
+    new_result = new_model.filter(fitted_params)
+    return new_result

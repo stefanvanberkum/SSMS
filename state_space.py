@@ -1252,6 +1252,7 @@ class SSMS_alt_4(sm.tsa.statespace.MLEModel):
                 n_cov += math.comb(group, 2)
         self.n_cov = n_cov
 
+        self.group_name = group_name
         self.group_names = group_names
         self.y_name = y_name
         self.z_names = z_names
@@ -1263,7 +1264,7 @@ class SSMS_alt_4(sm.tsa.statespace.MLEModel):
         self.cov_counts = cov_counts
 
         # Intialize the state-space model.
-        super(SSMS_alt_4, self).__init__(endog=y, exog=x_z, k_states=2 * n + k, initialization='approximate_diffuse')
+        super(SSMS_alt_4, self).__init__(endog=y, k_states=2 * n + k, initialization='approximate_diffuse')
 
         # First part of Z matrix is NxN identity matrix for mu.
         z_mu = np.eye(n)
@@ -1272,7 +1273,7 @@ class SSMS_alt_4(sm.tsa.statespace.MLEModel):
         z_nu = np.zeros((n, n))
 
         # Split x_z matrix into k distinct parts for each time period.
-        x_split = np.apply_along_axis(np.split, 1, self.exog, indices_or_sections=k)
+        x_split = np.apply_along_axis(np.split, 1, x_z, indices_or_sections=k)
 
         # Save for starting value computation.
         self.x = x_split
@@ -1298,9 +1299,6 @@ class SSMS_alt_4(sm.tsa.statespace.MLEModel):
         self["state_cov"] = np.zeros((self.k_states, self.k_states))
 
     @property
-    def clone(self, endog, exog=None, **kwargs):
-        return self._clone_from_init_kwds(endog, exog=exog, **kwargs)
-
     def start_params(self):
         """
         Set starting values using user-specified starting values from when the SSMS object was created.
@@ -1396,7 +1394,7 @@ class SSMS_alt_4(sm.tsa.statespace.MLEModel):
         """
 
         # Force covariances to be positive.
-        constrained = unconstrained.copy() ** 2
+        constrained = unconstrained ** 2
         return constrained
 
     def untransform_params(self, constrained):
@@ -1408,7 +1406,7 @@ class SSMS_alt_4(sm.tsa.statespace.MLEModel):
         """
 
         # Force covariances to be positive.
-        unconstrained = constrained.copy() ** 0.5
+        unconstrained = constrained ** 0.5
         return unconstrained
 
     def update(self, params, **kwargs):

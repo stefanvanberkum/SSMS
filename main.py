@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 
 from data_loader import load_data
 from state_space import SSMS, SSMS_alt, SSMS_alt_4
-from utils import print_results, print_results_alt
+from utils import prepare_forecast, print_results, print_results_alt
 
 """
 TODO:
@@ -29,6 +29,7 @@ def main():
     train_data = data[:63 * 153]
     test_data = data[63 * 153:]
     test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
+    test_train_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])][:4 * 153]
     # test_data = data[data['Region'].isin(
     #    ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
     #     'NL414_511', 'NL332_505'])]
@@ -48,13 +49,13 @@ def main():
     # model_selection_alt(train_data)
     # exit(0)
 
-    model = SSMS_alt_4(test_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
+    model = SSMS_alt_4(test_train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
     # initial = model.fit(maxiter=1000, maxfun=1000000)
     # result = model.fit(initial.params, method='nm', maxiter=200000, cov_type='oim')
     # initial = model.fit(method='nm', maxiter=20000)
     # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
     result = model.fit(maxiter=100000, maxfun=100000000, cov_type='oim')
-    exit(0)
+    extended_result = prepare_forecast(result, test_data)
     print_results_alt(result, save_path, 'result')
     result.save(os.path.join(save_path, 'result.pickle'))
 
