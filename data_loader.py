@@ -6,16 +6,19 @@ import datetime
 import math
 import os
 from datetime import date
+from plotnine import *
+from utils import get_ticks
 
 import numpy as np
 import pandas as pd
 
 
-def load_data(filepath: str, drop_outliers=True, threshold=10):
+def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
     """
     Load the required data.
 
     :param filepath: the location of the files
+    :param save_path: save path for plots
     :param drop_outliers: whether or not to drop outliers, default is True
     :param threshold: number of standard deviations away from moving average to be considered an outlier, default is 10
     :return: formatted data
@@ -28,7 +31,7 @@ def load_data(filepath: str, drop_outliers=True, threshold=10):
     supermarket_data, hospitality_data = load_turnover(filepath)
 
     # Load tracker data.
-    tracker_weekly = load_tracker(filepath)
+    tracker_weekly = load_tracker(filepath, save_path)
 
     # Load temperature data.
     temperature_data = load_temperature(filepath)
@@ -263,7 +266,7 @@ def load_turnover(filepath: str):
     return supermarket_data, hospitality_data
 
 
-def load_tracker(filepath: str):
+def load_tracker(filepath: str, save_path: str):
     """
     Loads the tracker data.
 
@@ -281,7 +284,6 @@ def load_tracker(filepath: str):
 
     # Pad with zeroes for missing dates (before COVID-19).
     tracker = tracker.reindex(pd.date_range(date(2018, 1, 1), tracker.index[-1]), fill_value=0)
-
     # Change daily data into weekly data by taking the mean.
     tracker_weekly = tracker.resample('W').agg(
         {'StringencyIndex': 'mean', 'GovernmentResponseIndex': 'mean', 'ContainmentHealthIndex': 'mean',
@@ -294,12 +296,6 @@ def load_tracker(filepath: str):
     # category_size is divided by number_of_categories - 1, since 0 is already one category
     category_size = highest_index / (number_of_categories - 1)
     # print(f'Category size: {category_size}')
-    #
-    # plt.figure()
-    # plt.title(f'StringencyIndex as continuous variable')
-    # plt.xlabel("Time")
-    # plt.ylabel("StringencyIndex")
-    # plt.plot(tracker_weekly.reset_index().index, tracker_weekly['StringencyIndex'])
 
     for idx, row in tracker_weekly.iterrows():
         if not math.isnan(tracker_weekly.loc[idx, 'StringencyIndex']):
@@ -310,13 +306,20 @@ def load_tracker(filepath: str):
     # for i in range(number_of_categories):
     #     group_size = tracker_weekly[tracker_weekly['StringencyIndex'] == i].shape[0]
     #     print(f'Number of observations in group {i}: {group_size}')
-    #
-    # plt.figure()
-    # plt.title(f'StringencyIndex with {number_of_categories} categories')
-    # plt.xlabel("Time")
-    # plt.ylabel("StringencyIndex")
-    # plt.plot(tracker_weekly.reset_index().index, tracker_weekly['StringencyIndex'])
-    # plt.show()
+
+    # Drop last two empty rows
+    tracker_weekly = tracker_weekly[:-2]
+    tracker_weekly['Date'] = pd.date_range(start='1/1/2018', periods=len(tracker_weekly), freq='W')
+    # Important events are the 1st/2nd lockdown and relaxations of (almost all) rules
+    events = [datetime.datetime.strptime('12-03-2020', '%d-%m-%Y'), datetime.datetime.strptime('24-06-2020', '%d-%m-%Y')
+        , datetime.datetime.strptime('14-12-2020', '%d-%m-%Y'), datetime.datetime.strptime('26-06-2021', '%d-%m-%Y')]
+    p = ggplot(tracker_weekly[112:], aes(x='Date', y='StringencyIndex')) \
+        + scale_x_datetime(breaks=get_ticks(tracker_weekly[112:], 8)[0], labels=get_ticks(tracker_weekly[112:], 8)[1]) \
+        + geom_line() \
+        + geom_vline(xintercept=events, linetype="dotted") \
+        + labs(x='Date', y='StringencyIndex')
+    ggsave(plot=p, filename='StringencyIndex_raw_timeseries', path=save_path, verbose=False, dpi=600)
+    del tracker_weekly['Date']
 
     # Get first difference of stringency index.
     tracker_weekly['StringencyIndexDiff'] = tracker_weekly['StringencyIndex'].diff()

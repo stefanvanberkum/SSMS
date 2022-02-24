@@ -6,11 +6,11 @@ import os
 import time
 
 import numpy as np
-from matplotlib import pyplot as plt
+from statsmodels.iolib.smpickle import load_pickle
 
 from data_loader import load_data
 from state_space import SSMS, SSMS_alt, SSMS_alt_4
-from utils import prepare_forecast, print_results, print_results_alt
+from utils import prepare_forecast, print_results, print_results_alt, plot_states, forecast_error
 
 """
 TODO:
@@ -24,15 +24,15 @@ def main():
     save_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'results')
 
     start_time = time.time()
-
-    data = load_data(data_path)
+    data = load_data(data_path, save_path)
     train_data = data[:63 * 153]
     test_data = data[63 * 153:]
-    test_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])]
-    test_train_data = data[data['Region'].isin(['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507'])][:4 * 153]
-    # test_data = data[data['Region'].isin(
-    #    ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
-    #     'NL414_511', 'NL332_505'])]
+    regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507']
+    # regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
+    #            'NL414_511', 'NL332_505']
+    # data = data[data['Region'].isin(regions)]
+    # train_data = train_data[train_data['Region'].isin(regions)]
+    # test_data = test_data[test_data['Region'].isin(regions)]
 
     # z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
     #           '50-75_nbrpromos_index_201801', 'StringencyIndex']
@@ -47,30 +47,32 @@ def main():
     alts = [False]
 
     # model_selection_alt(train_data)
-    # exit(0)
 
-    model = SSMS_alt_4(test_train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
-    # initial = model.fit(maxiter=1000, maxfun=1000000)
-    # result = model.fit(initial.params, method='nm', maxiter=200000, cov_type='oim')
-    # initial = model.fit(method='nm', maxiter=20000)
-    # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
-    result = model.fit(maxiter=100000, maxfun=100000000, cov_type='oim')
-    extended_result = prepare_forecast(result, test_data)
-    print_results_alt(result, save_path, 'result')
-    result.save(os.path.join(save_path, 'result.pickle'))
+    # use_pickle must be set to False when you change anything in the previous rows,
+    # this is because the pickle file needs to be based on the same (train_/test_)data and z_names as specified above
+    use_pickle = True
+    if use_pickle:
+        result = load_pickle(os.path.join(save_path, 'result.pickle'))
+    else:
+        model = SSMS_alt_4(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
+        # initial = model.fit(maxiter=1000, maxfun=1000000)
+        # result = model.fit(initial.params, method='nm', maxiter=200000, cov_type='oim')
+        # initial = model.fit(method='nm', maxiter=20000)
+        # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
+        result = model.fit(maxiter=100000, maxfun=100000000, cov_type='oim')
+        result.save(os.path.join(save_path, 'result.pickle'))
+
+    extended_model, extended_result = prepare_forecast(result, data)
+    # print_results_alt(result, save_path, 'result')
+    # print(result.summary())
+
+    group_names = result.model.group_names
+    plot_states(result, group_names, z_names, save_path)
+    forecast_error(extended_result, extended_model, group_names, save_path, 153, 190, 1, 'one_step_ahead_forecast')
+    # mse_forecast(extended_result, extended_model, group_names, save_path, 10, 190, 0, 'in_sample_prediction')
 
     end_time = time.time()
     print("Total runtime:", (end_time - start_time), sep=' ')
-
-    exit(0)
-    # print_results(result, save_path, 'test')
-    filtered = result.states.filtered[:, 20:]
-    for i in range(len(z_names)):
-        plt.plot(filtered[15:, i])
-        plt.suptitle(z_names[i])
-        plt.show()
-        plt.close('all')
-    exit(0)
 
 
 def run_exploratory(data, save_path):
@@ -116,50 +118,9 @@ def run_exploratory(data, save_path):
                          fancy_start=True)
             result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type)
 
-        # Make sure to plot the same regions each time.
         grouped = data.groupby('Region', sort=False)
         group_names = [name for name, group in grouped]
-        region_1 = group_names.index('NL310_503')
-        region_2 = group_names.index('NL33C_340')
-        region_3 = group_names.index('NL33C_506')
-        region_4 = group_names.index('NL212_507')
-
-        # Compute predictions and MSE.
-        y_pred = result.get_prediction(start=10, end=190)
-        y1_pred = y_pred.predicted_mean[:, region_1]
-        y2_pred = y_pred.predicted_mean[:, region_2]
-        y3_pred = y_pred.predicted_mean[:, region_3]
-        y4_pred = y_pred.predicted_mean[:, region_4]
-        mse_1 = np.mean(np.square(model.endog[10:, region_1] - y1_pred))
-        mse_2 = np.mean(np.square(model.endog[10:, region_2] - y2_pred))
-        mse_3 = np.mean(np.square(model.endog[10:, region_3] - y3_pred))
-        mse_4 = np.mean(np.square(model.endog[10:, region_4] - y4_pred))
-
-        mses = np.zeros(len(group_names))
-        for region in range(len(group_names)):
-            mses[region] = np.mean(np.square(model.endog[10:, region] - y_pred.predicted_mean[:, region]))
-        mse = np.mean(mses)
-
-        # Plot preliminary result.
-        t = np.arange(11, 192)
-        fig, axes = plt.subplots(2, 2)
-        axes[0, 0].set_title('mse: {0}'.format(format(mse_1, '.4f')))
-        axes[0, 0].set_xticks([])
-        axes[0, 0].plot(t, model.endog[10:, region_1], 'b')
-        axes[0, 0].plot(t, y1_pred, 'r')
-        axes[0, 1].set_title('mse: {0}'.format(format(mse_2, '.4f')))
-        axes[0, 1].set_xticks([])
-        axes[0, 1].plot(t, model.endog[10:, region_2], 'b')
-        axes[0, 1].plot(t, y2_pred, 'r')
-        axes[1, 0].set_title('mse: {0}'.format(format(mse_3, '.4f')))
-        axes[1, 0].plot(t, model.endog[10:, region_3], 'b')
-        axes[1, 0].plot(t, y3_pred, 'r')
-        axes[1, 1].set_title('mse: {0}'.format(format(mse_4, '.4f')))
-        axes[1, 1].plot(t, model.endog[10:, region_4], 'b')
-        axes[1, 1].plot(t, y4_pred, 'r')
-        fig.suptitle('{0} (mse: {1})'.format(name, format(mse, '.4f')))
-        plt.savefig(os.path.join(save_path, name), dpi=300, format='png')
-        plt.close('all')
+        mse_forecast(result, model, group_names, save_path, 10, 190, 0, 'in_sample_prediction')
 
         # Save result.
         print_results(result, save_path, name)
