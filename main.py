@@ -10,7 +10,7 @@ from statsmodels.iolib.smpickle import load_pickle
 
 from data_loader import load_data
 from state_space import SSMS, SSMS_alt, SSMS_alt_4
-from utils import prepare_forecast, print_results, print_results_alt, plot_states, mse_forecast
+from utils import mse_forecast, plot_states, prepare_forecast, print_results
 
 """
 TODO:
@@ -53,6 +53,7 @@ def main():
     use_pickle = True
     if use_pickle:
         result = load_pickle(os.path.join(save_path, 'result.pickle'))
+        result.model.group_name = 'Region'
     else:
         model = SSMS_alt_4(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
         # initial = model.fit(maxiter=1000, maxfun=1000000)
