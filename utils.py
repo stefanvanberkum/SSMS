@@ -25,34 +25,56 @@ def plot_states(results: MLEResults, regions: list, z_names: list, save_path: st
     :param save_path: save path for plots
     :return:
     """
+
     n_regions = len(regions)
     n_betas = len(z_names)
+    # Create confidence intervals for states (first n_regions*3 parameters are for the variances of y, mu and nu),
+    cis = np.zeros((results.states.filtered.shape[0], n_betas*2))
+    bound = 1.96 * np.sqrt(results.params[n_regions*3:])
+    for state in range(n_betas):
+        cis[:, state] = results.states.filtered[:, n_regions*2 + state] - bound[state]
+        cis[:, state+n_betas] = results.states.filtered[:, n_regions*2 + state] + bound[state]
+    # Create list cols with columns names for states Dataframe
     cols = []
-    for i in range(results.states.filtered.shape[1]):
+    for i in range(results.states.filtered.shape[1] + n_betas*2):
         if i < n_regions:
             cols.append('nu_'+regions[i])
         elif n_regions <= i < n_regions*2:
             cols.append('mu_'+regions[i-n_regions])
-        else:
+        elif n_regions*2 <= i < n_regions*2 + n_betas:
             cols.append(z_names[i-n_regions*2])
-    states = pd.DataFrame(results.states.filtered, columns=cols)
+        elif n_regions*2 + n_betas <= i < n_regions*2 + n_betas*2:
+            cols.append(z_names[i-(n_regions*2 + n_betas)] + '_lb')
+        else:
+            cols.append(z_names[i-(n_regions*2 + n_betas*2)] + '_ub')
+    states = pd.DataFrame(np.concatenate((results.states.filtered, cis), axis=1), columns=cols)
     states['Date'] = pd.date_range(start='1/1/2018', periods=len(states), freq='W')
-    # The first 13 observations are removed for nice graphs
-    states = states.iloc[13:, :]
+    # The first 5 observations are removed for nice graphs
+    states = states.iloc[5:, :]
+    # Important events are the first intelligent lockdown and relaxation of rules
+    events = [datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')]
     for i in range(n_betas):
-        p = ggplot(states, aes(x='Date', y=states.columns[n_regions*2+i])) \
-            + scale_x_date(date_labels="%Y-%W") \
-            + geom_line() \
-            + labs(x='Date', y=states.columns[n_regions*2+i])
+        if i == z_names.index('StringencyIndex'):
+            # Remove 0-values when plotting StringencyIndex
+            states = states[108:]
+        p = ggplot(states, aes(x='Date')) \
+            + scale_x_datetime(breaks=get_ticks(states, 8)[0], labels=get_ticks(states, 8)[1]) \
+            + geom_ribbon(
+            aes(ymin=states.iloc[:, n_regions*2 + n_betas + i], ymax=states.iloc[:, n_regions*2 + n_betas*2 + i],
+                color='"95% CI"'), alpha=0.1) \
+            + geom_line(aes(y=states.columns[n_regions*2+i], color='"State"')) \
+            + geom_vline(xintercept=events, linetype="dotted") \
+            + scale_color_manual(values=['#dedede', '#4472c4']) \
+            + labs(x='Date', y='State', color='Legend')
         # print(p)
-        ggsave(plot=p, filename=states.columns[n_regions*2+i], path=save_path, verbose=False)
+        ggsave(plot=p, filename='coefficient_for_'+z_names[i], path=save_path, verbose=False, dpi=600)
 
 
-def mse_forecast(results: MLEResults, model, regions: list, save_path: str, first=int, last=int, ci=bool, tp=str):
+def forecast_error(results: MLEResults, model, regions: list, save_path: str, first=int, last=int, ci=bool, tp=str):
     """
-    Computes MSE with one-step ahead forecasts for each region and saves it in save_path.
+    Computes forecast error with one-step ahead forecasts for each region and saves it in save_path.
     Plots SalesGoodsEUR with tp for regions indices specified in plot_regions and saves it in save_path.
-    For now only the plots for the regions with the largest/smallest MSE are saved.
+    For now only the plots for the regions with the largest/smallest error are saved.
 
     :param results: (extended) results (from prepare_forecast())
     :param model: (extended) model (from prepare_forecast())
@@ -71,49 +93,84 @@ def mse_forecast(results: MLEResults, model, regions: list, save_path: str, firs
     n_regions = len(regions)
     data = results.get_prediction(start=first, end=last)
 
-    # Calculate MSE use one-step ahead forecasts
-    mses = np.zeros(len(regions))
+    # Calculate MASE using one-step ahead forecasts
+    # mses = np.zeros(len(regions))
+    mases = np.zeros(len(regions))
     for region in range(len(regions)):
-        mses[region] = np.mean(np.square(model.endog[first:, region] - data.predicted_mean[:, region]))
-    mse = np.mean(mses)
-    best, worst = np.argmin(mses), np.argmax(mses)
-    pd.DataFrame(mses.reshape(1, n_regions), columns=regions).to_excel(os.path.join(save_path, 'mses_' + tp + '.xlsx'))
+        # mses[region] = np.mean(np.square(model.endog[first:, region] - data.predicted_mean[:, region]))
+        mae = np.mean(np.abs(model.endog[first:, region] - data.predicted_mean[:, region]))
+        mae_naive = np.mean(np.abs([x - model.endog[0:153:, region][i - 1] for i, x in enumerate(model.endog[0:153:, region])][1:]))
+        mases[region] = mae/mae_naive
+    # mse = np.mean(mses)
+    mean_mase = np.mean(mases)
+    med_mase = np.median(mases)
+    l1 = sum(x < 1 for x in mases)/mases.shape[0]
+
+    best, worst = np.argmin(mases), np.argmax(mases)
+    mase_df = pd.DataFrame(np.transpose(mases.reshape(1, n_regions)), index=regions, columns=['MASE'])
+    mase_df[''] = ''
+    mase_df['Best'] = [regions[best], mases[best]] + [''] * (len(mase_df) - 2)
+    mase_df['Worst'] = [regions[worst], mases[worst]] + [''] * (len(mase_df) - 2)
+    mase_df['Mean'] = [mean_mase] + [''] * (len(mase_df) - 1)
+    mase_df['Median'] = [med_mase] + [''] * (len(mase_df) - 1)
+    mase_df['Proportion of regions <1'] = [l1] + [''] * (len(mase_df) - 1)
+    mase_df.to_excel(os.path.join(save_path, 'mases_' + tp + '.xlsx'))
     print(f'{tp}s starting from t={first}')
-    print(f'Average MSE of regions : {mse}')
-    print(f'Region with smallest MSE: {regions[best]}, {mses[best]}')
-    print(f'Region with largest MSE: {regions[worst]}, {mses[worst]}')
+    print(f'Average MASE of regions : {mean_mase}')
+    print(f'Median MASE of regions : {med_mase}')
+    print(f'Proportion of regions with a MASE < 1: {l1}')
+    print(f'Region with smallest MASE: {regions[best]}, {mases[best]}')
+    print(f'Region with largest MASE: {regions[worst]}, {mases[worst]}')
     print()
 
     # Plot data for regions
     df = pd.DataFrame(np.concatenate((model.endog[first:, :], data.predicted_mean, data.conf_int()), axis=1))
     start_date = datetime.datetime(2018, 1, 1) + datetime.timedelta(weeks=first)
     df['Date'] = pd.date_range(start=start_date, periods=len(df), freq='W')
-    # Remove the first two rows (first two observations starting from first)
-    # such that the dates on the x-axis are nicely plotted
-    if first == 153:
-        df = df[3:]
     # Specify the indices of the regions you want to plot in plot_regions
     plot_regions = [best, worst]
+    # Important events are the second lockdown and relaxation of (almost all) rules
+    events = [datetime.datetime.strptime('2020-51-1', '%G-%V-%u'), datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]
     for i in range(len(plot_regions)):
         if ci:
             p = ggplot(df, aes(x='Date')) \
-                + scale_x_date(date_labels="%Y-%W") \
+                + scale_x_datetime(breaks=get_ticks(df, 8)[0], labels=get_ticks(df, 8)[1]) \
                 + geom_ribbon(
                 aes(ymin=df.iloc[:, n_regions * 2 + plot_regions[i]], ymax=df.iloc[:, n_regions * 3 + plot_regions[i]],
                     color='"95% CI"'), alpha=0.1) \
                 + geom_line(aes(y=df.iloc[:, plot_regions[i]], color='"Actual"')) \
                 + geom_line(aes(y=df.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) \
+                + geom_vline(xintercept=events, linetype="dotted") \
                 + scale_color_manual(values=['#dedede', '#4472c4', '#ed7d31']) \
                 + labs(x='Date', y='Sales', color='Legend')
         else:
             p = ggplot(df, aes(x='Date')) \
-                + scale_x_date(date_labels="%Y-%W") \
+                + scale_x_datetime(breaks=get_ticks(df, 8)[0], labels=get_ticks(df, 8)[1]) \
                 + geom_line(aes(y=df.iloc[:, plot_regions[i]], color='"Actual"')) \
                 + geom_line(aes(y=df.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) \
+                + geom_vline(xintercept=events, linetype="dotted") \
                 + scale_color_manual(values=['#4472c4', '#ed7d31']) \
                 + labs(x='Date', y='Sales', color='Legend')
         # print(p)
-        ggsave(plot=p, filename=regions[plot_regions[i]] + '_' + tp, path=save_path, verbose=False)
+        ggsave(plot=p, filename=regions[plot_regions[i]] + '_' + tp, path=save_path, verbose=False, dpi=600)
+
+
+def get_ticks(data: pd.DataFrame, n_ticks: int):
+    """
+    Returns x_axis ticks as dates
+
+    :param data: dataframe where the last column should contain pandas.Timestamp objects
+    :param n_ticks: number of ticks
+    :return: ticks (breaks) and their labels
+    """
+    x_breaks = []
+    x_labels = []
+    n_ticks = n_ticks - 1
+    interval = data.shape[0] / n_ticks
+    for i in range(n_ticks + 1):
+        x_breaks.append(data.iloc[0, -1:][0] + datetime.timedelta(weeks=interval * i))
+        x_labels.append((data.iloc[0, -1:][0] + datetime.timedelta(weeks=interval * i)).strftime('%G-%V'))
+    return x_breaks, x_labels
 
 
 def print_results(results: MLEResults, save_path: str, name: str):

@@ -10,7 +10,7 @@ from statsmodels.iolib.smpickle import load_pickle
 
 from data_loader import load_data
 from state_space import SSMS, SSMS_alt, SSMS_alt_4
-from utils import mse_forecast, plot_states, prepare_forecast, print_results
+from utils import forecast_error, plot_states, prepare_forecast, print_results
 
 """
 TODO:
@@ -24,15 +24,15 @@ def main():
     save_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'results')
 
     start_time = time.time()
-    data = load_data(data_path)
+    data = load_data(data_path, save_path)
     train_data = data[:63 * 153]
     test_data = data[63 * 153:]
-    # regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507']
+    regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507']
     # regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
     #            'NL414_511', 'NL332_505']
-    # data = data[data['Region'].isin(regions)]
-    # train_data = train_data[train_data['Region'].isin(regions)]
-    # test_data = test_data[test_data['Region'].isin(regions)]
+    data = data[data['Region'].isin(regions)]
+    train_data = train_data[train_data['Region'].isin(regions)]
+    test_data = test_data[test_data['Region'].isin(regions)]
 
     # z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
     #           '50-75_nbrpromos_index_201801', 'StringencyIndex']
@@ -53,7 +53,6 @@ def main():
     use_pickle = True
     if use_pickle:
         result = load_pickle(os.path.join(save_path, 'result.pickle'))
-        result.model.group_name = 'Region'
     else:
         model = SSMS_alt_4(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
         # initial = model.fit(maxiter=1000, maxfun=1000000)
@@ -65,11 +64,11 @@ def main():
 
     extended_model, extended_result = prepare_forecast(result, data)
     # print_results_alt(result, save_path, 'result')
-    # print_results(result, save_path, 'test')
+    # print(result.summary())
 
     group_names = result.model.group_names
     plot_states(result, group_names, z_names, save_path)
-    mse_forecast(extended_result, extended_model, group_names, save_path, 153, 190, 1, 'one_step_ahead_forecast')
+    forecast_error(extended_result, extended_model, group_names, save_path, 153, 190, 1, 'one_step_ahead_forecast')
     # mse_forecast(extended_result, extended_model, group_names, save_path, 10, 190, 0, 'in_sample_prediction')
 
     end_time = time.time()
@@ -121,7 +120,7 @@ def run_exploratory(data, save_path):
 
         grouped = data.groupby('Region', sort=False)
         group_names = [name for name, group in grouped]
-        mse_forecast(result, model, group_names, save_path, 10, 190, 0, 'in_sample_prediction')
+        # mse_forecast(result, model, group_names, save_path, 10, 190, 0, 'in_sample_prediction')
 
         # Save result.
         print_results(result, save_path, name)
