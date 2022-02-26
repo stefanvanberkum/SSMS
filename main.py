@@ -30,9 +30,9 @@ def main():
     regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507']
     # regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
     #            'NL414_511', 'NL332_505']
-    data = data[data['Region'].isin(regions)]
-    train_data = train_data[train_data['Region'].isin(regions)]
-    test_data = test_data[test_data['Region'].isin(regions)]
+    # data = data[data['Region'].isin(regions)]
+    # train_data = train_data[train_data['Region'].isin(regions)]
+    # test_data = test_data[test_data['Region'].isin(regions)]
 
     # z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
     #           '50-75_nbrpromos_index_201801', 'StringencyIndex']
@@ -53,6 +53,7 @@ def main():
     use_pickle = True
     if use_pickle:
         result = load_pickle(os.path.join(save_path, 'result.pickle'))
+        result.model.group_name = 'Region'
     else:
         model = SSMS_alt_4(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
         # initial = model.fit(maxiter=1000, maxfun=1000000)
