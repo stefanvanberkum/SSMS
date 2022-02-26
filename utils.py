@@ -29,14 +29,17 @@ def plot_states(results: MLEResults, regions: list, z_names: list, save_path: st
     n_regions = len(regions)
     n_betas = len(z_names)
     # Create confidence intervals for states (first n_regions*3 parameters are for the variances of y, mu and nu),
-    cis = np.zeros((results.states.filtered.shape[0], n_betas*2))
+    cis = np.zeros((results.states.filtered.shape[0], n_betas*3))
     bound = 1.96 * np.sqrt(results.params[n_regions*3:])
     for state in range(n_betas):
         cis[:, state] = results.states.filtered[:, n_regions*2 + state] - bound[state]
         cis[:, state+n_betas] = results.states.filtered[:, n_regions*2 + state] + bound[state]
+        cis[:, state+n_betas*2] = np.multiply(cis[:, state], cis[:, state+n_betas])
+        cis[:, state + n_betas * 2][cis[:, state+n_betas*2] < 0] = 0
+        cis[:, state + n_betas * 2][cis[:, state+n_betas*2] > 0] = 1
     # Create list cols with columns names for states Dataframe
     cols = []
-    for i in range(results.states.filtered.shape[1] + n_betas*2):
+    for i in range(results.states.filtered.shape[1] + n_betas*3):
         if i < n_regions:
             cols.append('nu_'+regions[i])
         elif n_regions <= i < n_regions*2:
@@ -45,10 +48,15 @@ def plot_states(results: MLEResults, regions: list, z_names: list, save_path: st
             cols.append(z_names[i-n_regions*2])
         elif n_regions*2 + n_betas <= i < n_regions*2 + n_betas*2:
             cols.append(z_names[i-(n_regions*2 + n_betas)] + '_lb')
-        else:
+        elif n_regions*2 + n_betas*2 <= i < n_regions*2 + n_betas*3:
             cols.append(z_names[i-(n_regions*2 + n_betas*2)] + '_ub')
+        else:
+            cols.append(z_names[i-(n_regions*2 + n_betas*3)] + '_significant')
     states = pd.DataFrame(np.concatenate((results.states.filtered, cis), axis=1), columns=cols)
     states['Date'] = pd.date_range(start='1/1/2018', periods=len(states), freq='W')
+    states_01 = states.iloc[:, -(n_betas*4 + 1):]
+    states_01['Date'] = states_01['Date'].dt.strftime('%G%V')
+    states_01.to_excel(os.path.join(save_path, 'states_01.xlsx'))
     # The first 5 observations are removed for nice graphs
     states = states.iloc[5:, :]
     # Important events are the first intelligent lockdown and relaxation of rules
