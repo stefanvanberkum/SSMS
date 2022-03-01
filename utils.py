@@ -63,7 +63,7 @@ def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherR
         else:
             cols.append(z_names[i-(n_regions*2 + n_betas*3)] + '_significant')
     states_df = pd.DataFrame(np.concatenate((states, cis), axis=1), columns=cols)
-    states_df['Date'] = pd.date_range(start='1/1/2018', periods=len(states), freq='W')
+    states_df['Date'] = pd.date_range(start='1/1/2018', periods=len(states_df), freq='W')
     states_df_01 = states_df.iloc[:, -(n_betas*4 + 1):]
     states_df_01['Date'] = states_df_01['Date'].dt.strftime('%G%V')
     if isinstance(smoothed_results, MLEResultsWrapper):
@@ -155,8 +155,8 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
     df_full['Date'] = pd.date_range(start=datetime.datetime(2018, 1, 1), periods=len(df_full), freq='W')
     plot_regions = np.concatenate((mases.argsort()[:int(n_plots/4)], mases.argsort()[-int(n_plots/4):][::-1]), axis=0)
     # Important events are the second lockdown and relaxation of (almost all) rules
-    events_test = [datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')]
-    events_full = [*events_test, *[datetime.datetime.strptime('2020-51-1', '%G-%V-%u'), datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]]
+    events_test = [datetime.datetime.strptime('2020-51-1', '%G-%V-%u'), datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]
+    events_full = [*[datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')], *events_test]
     for i in range(plot_regions.shape[0]):
         if ci:
             p = ggplot(df_pred, aes(x='Date')) \
@@ -166,7 +166,7 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
                     color='"95% CI"'), alpha=0.1) \
                 + geom_line(aes(y=df_pred.iloc[:, plot_regions[i]], color='"Actual"')) \
                 + geom_line(aes(y=df_pred.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) \
-                + geom_vline(xintercept=events_full, linetype="dotted") \
+                + geom_vline(xintercept=events_test, linetype="dotted") \
                 + scale_color_manual(values=['#dedede', '#4472c4', '#ed7d31']) \
                 + labs(x='Date', y='Sales', color='Legend')
             q = ggplot(df_full, aes(x='Date')) \
@@ -181,7 +181,7 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
                 + scale_x_datetime(breaks=get_ticks(df_pred, 8)[0], labels=get_ticks(df_pred, 8)[1]) \
                 + geom_line(aes(y=df_pred.iloc[:, plot_regions[i]], color='"Actual"')) \
                 + geom_line(aes(y=df_pred.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) \
-                + geom_vline(xintercept=events_full, linetype="dotted") \
+                + geom_vline(xintercept=events_test, linetype="dotted") \
                 + labs(x='Date', y='Sales')
         # print(p)
         if i < plot_regions.shape[0] / 2:
