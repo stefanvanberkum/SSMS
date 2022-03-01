@@ -7,19 +7,21 @@ import datetime
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from statsmodels.tsa.statespace.mlemodel import MLEResults
+from statsmodels.tsa.statespace.mlemodel import MLEResults, MLEResultsWrapper
+from statsmodels.tsa.statespace.kalman_smoother import SmootherResults
 from plotnine import *
 
 from state_space import SSMS, SSMS_alt, SSMS_alt_4
 
 
-def plot_states(results: MLEResults, regions: list, z_names: list, save_path: str):
+def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherResults, regions: list, z_names: list, save_path: str):
     """
     Plots states (all variables specified in z_names) and saves it in save_path.
     The dataframe states contains all the states (mu, nu, z_names) over time.
 
-    :param results: train results from a SSMS_alt_4 class
-    (this function might not work for with results from other classes)
+    :param filtered_results: filtered results from a SSMS_alt_4 class
+    :param smoothed_results: smoothed results from a SSMS_alt_4 class, smoothed results should be an MLEResultsWrapper
+    if you don't wanted smoothed states
     :param regions: list of region names
     :param z_names: a list of column names of the independent variables to be placed in the Z (design) matrix
     :param save_path: save path for plots
@@ -28,18 +30,26 @@ def plot_states(results: MLEResults, regions: list, z_names: list, save_path: st
 
     n_regions = len(regions)
     n_betas = len(z_names)
-    # Create confidence intervals for states (first n_regions*3 parameters are for the variances of y, mu and nu),
-    cis = np.zeros((results.states.filtered.shape[0], n_betas*3))
-    bound = 1.96 * np.sqrt(results.params[n_regions*3:])
-    for state in range(n_betas):
-        cis[:, state] = results.states.filtered[:, n_regions*2 + state] - bound[state]
-        cis[:, state+n_betas] = results.states.filtered[:, n_regions*2 + state] + bound[state]
-        cis[:, state+n_betas*2] = np.multiply(cis[:, state], cis[:, state+n_betas])
-        cis[:, state + n_betas * 2][cis[:, state+n_betas*2] < 0] = 0
-        cis[:, state + n_betas * 2][cis[:, state+n_betas*2] > 0] = 1
+    # Create confidence intervals for states (first n_regions*3 parameters are for the variances of y, mu and nu)
+    if isinstance(smoothed_results, MLEResultsWrapper):
+        states = np.transpose(filtered_results.filtered_state)
+        cis = np.zeros((states.shape[0], n_betas*3))
+        bound = 1.96 * np.sqrt(filtered_results.params[n_regions*3:])
+    else:
+        states = np.transpose(smoothed_results.smoothed_state)
+        cis = np.zeros((states.shape[0], n_betas*3))
+        # Parameters (including the parameters for state variances) are the same for filtered states and
+        # smoothed states
+        bound = 1.96 * np.sqrt(filtered_results.params[n_regions*3:])
+    for i in range(n_betas):
+        cis[:, i] = states[:, n_regions * 2 + i] - bound[i]
+        cis[:, i + n_betas] = states[:, n_regions * 2 + i] + bound[i]
+        cis[:, i + n_betas * 2] = np.multiply(cis[:, i], cis[:, i + n_betas])
+        cis[:, i + n_betas * 2][cis[:, i + n_betas * 2] < 0] = 0
+        cis[:, i + n_betas * 2][cis[:, i + n_betas * 2] > 0] = 1
     # Create list cols with columns names for states Dataframe
     cols = []
-    for i in range(results.states.filtered.shape[1] + n_betas*3):
+    for i in range(states.shape[1] + n_betas*3):
         if i < n_regions:
             cols.append('nu_'+regions[i])
         elif n_regions <= i < n_regions*2:
@@ -52,40 +62,44 @@ def plot_states(results: MLEResults, regions: list, z_names: list, save_path: st
             cols.append(z_names[i-(n_regions*2 + n_betas*2)] + '_ub')
         else:
             cols.append(z_names[i-(n_regions*2 + n_betas*3)] + '_significant')
-    states = pd.DataFrame(np.concatenate((results.states.filtered, cis), axis=1), columns=cols)
-    states['Date'] = pd.date_range(start='1/1/2018', periods=len(states), freq='W')
-    states_01 = states.iloc[:, -(n_betas*4 + 1):]
-    states_01['Date'] = states_01['Date'].dt.strftime('%G%V')
-    states_01.to_excel(os.path.join(save_path, 'states_01.xlsx'))
+    states_df = pd.DataFrame(np.concatenate((states, cis), axis=1), columns=cols)
+    states_df['Date'] = pd.date_range(start='1/1/2018', periods=len(states), freq='W')
+    states_df_01 = states_df.iloc[:, -(n_betas*4 + 1):]
+    states_df_01['Date'] = states_df_01['Date'].dt.strftime('%G%V')
+    if isinstance(smoothed_results, MLEResultsWrapper):
+        states_df_01.to_excel(os.path.join(save_path, 'states_filtered.xlsx'))
+    else:
+        states_df_01.to_excel(os.path.join(save_path, 'states_smoothed.xlsx'))
     # The first 5 observations are removed for nice graphs
-    states = states.iloc[5:, :]
+    states_df = states_df.iloc[5:, :]
     # Important events are the first intelligent lockdown and relaxation of rules
     events = [datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')]
     for i in range(n_betas):
         if i == z_names.index('StringencyIndex'):
             # Remove 0-values when plotting StringencyIndex
-            states = states[108:]
-        p = ggplot(states, aes(x='Date')) \
-            + scale_x_datetime(breaks=get_ticks(states, 8)[0], labels=get_ticks(states, 8)[1]) \
+            states_df = states_df[108:]
+        p = ggplot(states_df, aes(x='Date')) \
+            + scale_x_datetime(breaks=get_ticks(states_df, 8)[0], labels=get_ticks(states_df, 8)[1]) \
             + geom_ribbon(
-            aes(ymin=states.iloc[:, n_regions*2 + n_betas + i], ymax=states.iloc[:, n_regions*2 + n_betas*2 + i],
+            aes(ymin=states_df.iloc[:, n_regions*2 + n_betas + i], ymax=states_df.iloc[:, n_regions*2 + n_betas*2 + i],
                 color='"95% CI"'), alpha=0.1) \
-            + geom_line(aes(y=states.columns[n_regions*2+i], color='"State"')) \
+            + geom_line(aes(y=states_df.columns[n_regions*2+i], color='"State"')) \
             + geom_vline(xintercept=events, linetype="dotted") \
             + scale_color_manual(values=['#dedede', '#4472c4']) \
             + labs(x='Date', y='State', color='Legend')
         # print(p)
-        ggsave(plot=p, filename='coefficient_for_'+z_names[i], path=save_path, verbose=False, dpi=600)
+        if isinstance(smoothed_results, MLEResultsWrapper):
+            ggsave(plot=p, filename='coefficient_for_filtered_'+z_names[i], path=save_path, verbose=False, dpi=600)
+        else:
+            ggsave(plot=p, filename='coefficient_for_smoothed_'+z_names[i], path=save_path, verbose=False, dpi=600)
 
 
-def forecast_error(results: MLEResults, model, regions: list, save_path: str, first=int, last=int, ci=bool, tp=str):
+def forecast_error(results: MLEResults, regions: list, save_path: str, first=int, last=int, ci=bool, tp=str, n_plots=20):
     """
     Computes forecast error with one-step ahead forecasts for each region and saves it in save_path.
     Plots SalesGoodsEUR with tp for regions indices specified in plot_regions and saves it in save_path.
-    For now only the plots for the regions with the largest/smallest error are saved.
 
     :param results: (extended) results (from prepare_forecast())
-    :param model: (extended) model (from prepare_forecast())
     :param regions: list of region names,
     the order of the names should be exactly the same as the order of the regions in the model
     :param save_path: save path for plots
@@ -95,10 +109,12 @@ def forecast_error(results: MLEResults, model, regions: list, save_path: str, fi
     if the CI's become too big set ci=False otherwise the sales will be plotted as straight lines
     :param tp: specify the type of data (e.g. in_sample_prediction or one_step_ahead_forecast) you want to plot,
     use _ instead of spaces in for tp, since the name of the plots/excel files will also have this name
+    :param n_plots: the number of plots to save, default is 20 plots (5 best + 5 worst forecasts + 10 actual sales)
     :return:
     """
 
     n_regions = len(regions)
+    model = results.model
     data = results.get_prediction(start=first, end=last)
 
     # Calculate MASE using one-step ahead forecasts
@@ -132,35 +148,52 @@ def forecast_error(results: MLEResults, model, regions: list, save_path: str, fi
     print()
 
     # Plot data for regions
-    df = pd.DataFrame(np.concatenate((model.endog[first:, :], data.predicted_mean, data.conf_int()), axis=1))
+    df_pred = pd.DataFrame(np.concatenate((model.endog[first:, :], data.predicted_mean, data.conf_int()), axis=1))
     start_date = datetime.datetime(2018, 1, 1) + datetime.timedelta(weeks=first)
-    df['Date'] = pd.date_range(start=start_date, periods=len(df), freq='W')
-    # Specify the indices of the regions you want to plot in plot_regions
-    plot_regions = [best, worst]
+    df_pred['Date'] = pd.date_range(start=start_date, periods=len(df_pred), freq='W')
+    df_full = pd.DataFrame(model.endog)
+    df_full['Date'] = pd.date_range(start=datetime.datetime(2018, 1, 1), periods=len(df_full), freq='W')
+    plot_regions = np.concatenate((mases.argsort()[:int(n_plots/4)], mases.argsort()[-int(n_plots/4):][::-1]), axis=0)
     # Important events are the second lockdown and relaxation of (almost all) rules
-    events = [datetime.datetime.strptime('2020-51-1', '%G-%V-%u'), datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]
-    for i in range(len(plot_regions)):
+    events_test = [datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')]
+    events_full = [*events_test, *[datetime.datetime.strptime('2020-51-1', '%G-%V-%u'), datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]]
+    for i in range(plot_regions.shape[0]):
         if ci:
-            p = ggplot(df, aes(x='Date')) \
-                + scale_x_datetime(breaks=get_ticks(df, 8)[0], labels=get_ticks(df, 8)[1]) \
+            p = ggplot(df_pred, aes(x='Date')) \
+                + scale_x_datetime(breaks=get_ticks(df_pred, 8)[0], labels=get_ticks(df_pred, 8)[1]) \
                 + geom_ribbon(
-                aes(ymin=df.iloc[:, n_regions * 2 + plot_regions[i]], ymax=df.iloc[:, n_regions * 3 + plot_regions[i]],
+                aes(ymin=df_pred.iloc[:, n_regions * 2 + plot_regions[i]], ymax=df_pred.iloc[:, n_regions * 3 + plot_regions[i]],
                     color='"95% CI"'), alpha=0.1) \
-                + geom_line(aes(y=df.iloc[:, plot_regions[i]], color='"Actual"')) \
-                + geom_line(aes(y=df.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) \
-                + geom_vline(xintercept=events, linetype="dotted") \
+                + geom_line(aes(y=df_pred.iloc[:, plot_regions[i]], color='"Actual"')) \
+                + geom_line(aes(y=df_pred.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) \
+                + geom_vline(xintercept=events_full, linetype="dotted") \
                 + scale_color_manual(values=['#dedede', '#4472c4', '#ed7d31']) \
                 + labs(x='Date', y='Sales', color='Legend')
-        else:
-            p = ggplot(df, aes(x='Date')) \
-                + scale_x_datetime(breaks=get_ticks(df, 8)[0], labels=get_ticks(df, 8)[1]) \
-                + geom_line(aes(y=df.iloc[:, plot_regions[i]], color='"Actual"')) \
-                + geom_line(aes(y=df.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) \
-                + geom_vline(xintercept=events, linetype="dotted") \
-                + scale_color_manual(values=['#4472c4', '#ed7d31']) \
+            q = ggplot(df_full, aes(x='Date')) \
+                + scale_x_datetime(breaks=get_ticks(df_full, 8)[0], labels=get_ticks(df_full, 8)[1]) \
+                + geom_line(aes(y=df_full.iloc[:, plot_regions[i]], color='"Actual"')) \
+                + geom_vline(xintercept=events_full, linetype="dotted") \
+                + geom_vline(xintercept=[datetime.datetime.strptime('2020-50-1', '%G-%V-%u')], linetype="solid") \
+                + scale_color_manual(values=['#4472c4']) \
                 + labs(x='Date', y='Sales', color='Legend')
+        else:
+            p = ggplot(df_pred, aes(x='Date')) \
+                + scale_x_datetime(breaks=get_ticks(df_pred, 8)[0], labels=get_ticks(df_pred, 8)[1]) \
+                + geom_line(aes(y=df_pred.iloc[:, plot_regions[i]], color='"Actual"')) \
+                + geom_line(aes(y=df_pred.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) \
+                + geom_vline(xintercept=events_full, linetype="dotted") \
+                + labs(x='Date', y='Sales')
         # print(p)
-        ggsave(plot=p, filename=regions[plot_regions[i]] + '_' + tp, path=save_path, verbose=False, dpi=600)
+        if i < plot_regions.shape[0] / 2:
+            ggsave(plot=p, filename=tp + '_best_' + str(i + 1) + '_' + regions[plot_regions[i]], path=save_path,
+                   verbose=False, dpi=600)
+            ggsave(plot=q, filename='actual_sales_best_' + str(i + 1) + '_' + regions[plot_regions[i]], path=save_path,
+                   verbose=False, dpi=600)
+        else:
+            ggsave(plot=p, filename=tp + '_worst_' + str(int(i - plot_regions.shape[0] / 2 + 1)) + '_'
+                                    + regions[plot_regions[i]], path=save_path, verbose=False, dpi=600)
+            ggsave(plot=q, filename='actual_sales_worst_' + str(int(i - plot_regions.shape[0] / 2 + 1))
+                                    + '_' + regions[plot_regions[i]], path=save_path, verbose=False, dpi=600)
 
 
 def get_ticks(data: pd.DataFrame, n_ticks: int):
@@ -400,4 +433,4 @@ def prepare_forecast(results: MLEResults, data: pd.DataFrame):
                            cov_rest=model.cov_rest)
     fitted_params = results.params
     new_result = new_model.filter(fitted_params)
-    return new_model, new_result
+    return new_result
