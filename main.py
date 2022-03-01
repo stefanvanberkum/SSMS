@@ -10,7 +10,7 @@ from statsmodels.iolib.smpickle import load_pickle
 
 from data_loader import load_data
 from state_space import SSMS, SSMS_alt, SSMS_alt_4
-from utils import forecast_error, plot_states, prepare_forecast, print_results
+from utils import prepare_forecast, print_results, print_results_alt, plot_states, forecast_error
 
 """
 TODO:
@@ -27,9 +27,9 @@ def main():
     data = load_data(data_path, save_path)
     train_data = data[:63 * 153]
     test_data = data[63 * 153:]
-    regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507']
     # regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
     #            'NL414_511', 'NL332_505']
+    # regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508']
     # data = data[data['Region'].isin(regions)]
     # train_data = train_data[train_data['Region'].isin(regions)]
     # test_data = test_data[test_data['Region'].isin(regions)]
@@ -53,7 +53,7 @@ def main():
     use_pickle = True
     if use_pickle:
         result = load_pickle(os.path.join(save_path, 'result.pickle'))
-        result.model.group_name = 'Region'
+        model = result.model
     else:
         model = SSMS_alt_4(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
         # initial = model.fit(maxiter=1000, maxfun=1000000)
@@ -63,14 +63,16 @@ def main():
         result = model.fit(maxiter=100000, maxfun=100000000, cov_type='oim')
         result.save(os.path.join(save_path, 'result.pickle'))
 
-    extended_model, extended_result = prepare_forecast(result, data)
+    extended_filtered_result = prepare_forecast(result, data)
+    smoothed_result = model.smooth(result.params, return_ssm=1)
     # print_results_alt(result, save_path, 'result')
     # print(result.summary())
 
     group_names = result.model.group_names
-    plot_states(result, group_names, z_names, save_path)
-    forecast_error(extended_result, extended_model, group_names, save_path, 153, 190, 1, 'one_step_ahead_forecast')
-    # mse_forecast(extended_result, extended_model, group_names, save_path, 10, 190, 0, 'in_sample_prediction')
+    plot_states(result, result, group_names, z_names, save_path)
+    plot_states(result, smoothed_result, group_names, z_names, save_path)
+    forecast_error(extended_filtered_result, group_names, save_path, 153, 190, 1, 'one_step_ahead_forecast')
+    # forecast_error(result, group_names, save_path, 10, 152, 0, 'in_sample_prediction', n_plots=8)
 
     end_time = time.time()
     print("Total runtime:", (end_time - start_time), sep=' ')
@@ -121,7 +123,7 @@ def run_exploratory(data, save_path):
 
         grouped = data.groupby('Region', sort=False)
         group_names = [name for name, group in grouped]
-        # mse_forecast(result, model, group_names, save_path, 10, 190, 0, 'in_sample_prediction')
+        forecast_error(result, group_names, save_path, 10, 190, 0, 'in_sample_prediction', n_plots=8)
 
         # Save result.
         print_results(result, save_path, name)
