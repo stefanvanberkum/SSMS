@@ -9,14 +9,8 @@ import numpy as np
 from statsmodels.iolib.smpickle import load_pickle
 
 from data_loader import load_data
-from state_space import SSMS, SSMS_alt, SSMS_alt_4
-from utils import forecast_error, plot_states, prepare_forecast, print_results
-
-"""
-TODO:
-- State printing
-- Forecasting (train/test)
-"""
+from state_space import SSMS
+from utils import forecast_error, plot_states, prepare_forecast
 
 
 def main():
@@ -56,7 +50,7 @@ def main():
         result.model.group_name = 'Region'
         model = result.model
     else:
-        model = SSMS_alt_4(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
+        model = SSMS(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
         # initial = model.fit(maxiter=1000, maxfun=1000000)
         # result = model.fit(initial.params, method='nm', maxiter=200000, cov_type='oim')
         # initial = model.fit(method='nm', maxiter=20000)
@@ -79,127 +73,7 @@ def main():
     print("Total runtime:", (end_time - start_time), sep=' ')
 
 
-def run_exploratory(data, save_path):
-    """
-    Runs different model types for exploratory analysis.
-
-    :param data: the dataset
-    :param save_path: save path for plots and parameters
-    :return:
-    """
-
-    z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
-               '50-75_nbrpromos_index_201801']
-    d_names = ['StringencyIndex']
-    c_names = ['StringencyIndexDiff']
-    var_start = 1
-    cov_rests = ['GC', 'IDE']
-    cov_group = 'nuts3_code'
-    cov_type = 'oim'
-    alts = [True, False]
-
-    def explore(params: list):
-        """
-        Explores a possible model specification.
-
-        :param params: a list of parameters to be tested, of the form [cov_rest, alt, cov_start]
-        :return:
-        """
-        cov_rest = params[0]
-        alt = params[1]
-        cov_start = params[2]
-        name = '_'.join([cov_rest, str(alt), str(cov_start)])
-        print("Running " + name + "...")
-        split_time = time.time()
-        if alt:
-            model = SSMS_alt(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, d_names=d_names,
-                             c_names=c_names, cov_rest=cov_rest, cov_group=cov_group, var_start=var_start,
-                             cov_start=cov_start, fancy_start=True)
-            result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type)
-        else:
-            model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, c_names=c_names,
-                         cov_rest=cov_rest, cov_group=cov_group, var_start=var_start, cov_start=cov_start,
-                         fancy_start=True)
-            result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type)
-
-        grouped = data.groupby('Region', sort=False)
-        group_names = [name for name, group in grouped]
-        forecast_error(result, group_names, save_path, 10, 190, 0, 'in_sample_prediction', n_plots=8)
-
-        # Save result.
-        print_results(result, save_path, name)
-        result.save(os.path.join(save_path, name + '.pickle'))
-
-        print("Done!")
-        end_time = time.time()
-        print("Runtime:", (end_time - split_time), sep=' ')
-
-    # Run exploratory analysis.
-    for cov_rest in cov_rests:
-        for alt in alts:
-            if cov_rest == 'GC':
-                cov_starts = [0, 0.001, 0.01]
-            else:
-                cov_starts = [0]
-            for cov_start in cov_starts:
-                explore([cov_rest, alt, cov_start])
-
-
-def select_variables(data):
-    """
-    Runs the IDE-type model selection.
-
-    :param data: the dataset
-    :return:
-    """
-
-    z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
-               '50-75_nbrpromos_index_201801']
-    c_names = ['StringencyIndexDiff']
-    cov_rest = 'IDE'
-    cov_type = 'oim'
-
-    def select(params: list):
-        """
-        Runs a possible model specification.
-
-        :param params: a list of the parameters to be used
-        :return: the AIC
-        """
-        model_name = ', '.join(params)
-        print("Running with: " + model_name + "...")
-        split_time = time.time()
-        model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=params, c_names=c_names,
-                     cov_rest=cov_rest)
-        result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type, disp=-1)
-
-        print("Done!")
-        end_time = time.time()
-        print("Runtime:", (end_time - split_time), sep=' ')
-        return result.aic
-
-    # Run exploratory analysis.
-    best_aic = select(z_names)
-    while len(z_names) > 1:
-        best_rest = ''
-        for z_name in z_names:
-            z_copy = z_names.copy()
-            z_copy.remove(z_name)
-            aic = select(z_copy)
-
-            if aic < best_aic:
-                best_aic = aic
-                best_rest = z_name
-        if best_rest != '':
-            print("Best restriction: " + best_rest)
-            z_names.remove(best_rest)
-        else:
-            break
-    name = ', '.join(z_names)
-    print("Best parameter set: " + name)
-
-
-def model_selection_alt(data):
+def model_selection(data):
     """
     Runs model selection.
 
@@ -223,8 +97,8 @@ def model_selection_alt(data):
         model_name = '_'.join([params[0], str(params[1])])
         print("Running " + model_name + "...")
         split_time = time.time()
-        model = SSMS_alt_4(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest=params[0],
-                           cov_start=params[1], cov_group=cov_group)
+        model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest=params[0],
+                     cov_start=params[1], cov_group=cov_group)
         result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type, disp=-1)
 
         print("Done!")
@@ -243,8 +117,8 @@ def model_selection_alt(data):
         model_name = ', '.join(params)
         print("Running with: " + model_name + "...")
         split_time = time.time()
-        model = SSMS_alt_4(data, group_name='Region', y_name='SalesGoodsEUR', z_names=params, cov_rest=model_type[0],
-                           cov_start=model_type[1], cov_group=cov_group)
+        model = SSMS(data, group_name='Region', y_name='SalesGoodsEUR', z_names=params, cov_rest=model_type[0],
+                     cov_start=model_type[1], cov_group=cov_group)
         result = model.fit(maxiter=10000, maxfun=10000000, cov_type=cov_type, disp=-1)
 
         print("Done!")
