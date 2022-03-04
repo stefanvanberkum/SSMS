@@ -14,6 +14,9 @@ from utils import forecast_error, plot_states, prepare_forecast
 
 
 def main():
+    model_select = False
+    use_pickle = False  # Make sure that the settings below match those of your pickle instance.
+
     data_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'data')
     save_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'results')
 
@@ -40,34 +43,27 @@ def main():
     cov_type = 'oim'
     alts = [False]
 
-    # model_selection_alt(train_data)
-
-    # use_pickle must be set to False when you change anything in the previous rows,
-    # this is because the pickle file needs to be based on the same (train_/test_)data and z_names as specified above
-    use_pickle = True
-    if use_pickle:
+    if model_select:
+        model_selection(train_data)
+    elif use_pickle:
         result = load_pickle(os.path.join(save_path, 'result.pickle'))
         result.model.group_name = 'Region'
         model = result.model
     else:
         model = SSMS(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
-        # initial = model.fit(maxiter=1000, maxfun=1000000)
-        # result = model.fit(initial.params, method='nm', maxiter=200000, cov_type='oim')
-        # initial = model.fit(method='nm', maxiter=20000)
-        # result = model.fit(initial.params, maxiter=1000, maxfun=100000)
         result = model.fit(maxiter=100000, maxfun=100000000, cov_type='oim')
         result.save(os.path.join(save_path, 'result.pickle'))
 
-    extended_filtered_result = prepare_forecast(result, data)
-    smoothed_result = model.smooth(result.params, return_ssm=1)
-    # print_results_alt(result, save_path, 'result')
-    # print(result.summary())
+    if not model_select:
+        extended_filtered_result = prepare_forecast(result, data)
+        smoothed_result = model.smooth(result.params, return_ssm=1)
 
-    group_names = result.model.group_names
-    plot_states(result, result, group_names, z_names, save_path)
-    plot_states(result, smoothed_result, group_names, z_names, save_path)
-    forecast_error(extended_filtered_result, group_names, save_path, 153, 190, 1, 'one_step_ahead_forecast')
-    # forecast_error(result, group_names, save_path, 10, 152, 0, 'in_sample_prediction', n_plots=8)
+        group_names = result.model.group_names
+        plot_states(result, result, group_names, z_names, save_path)
+        plot_states(result, smoothed_result, group_names, z_names, save_path)
+        forecast_error(extended_filtered_result, group_names, save_path, 153, 190, 1,
+                       'one_step_ahead_forecast')  # forecast_error(result, group_names, save_path, 10, 152, 0,
+        # 'in_sample_prediction', n_plots=8)
 
     end_time = time.time()
     print("Total runtime:", (end_time - start_time), sep=' ')
