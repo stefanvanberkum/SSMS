@@ -10,12 +10,12 @@ from statsmodels.iolib.smpickle import load_pickle
 
 from data_loader import load_data
 from state_space import SSMS
-from utils import forecast_error, plot_states, prepare_forecast
+from utils import forecast_error, plot_states, prepare_forecast, print_results
 
 
 def main():
     model_select = False
-    use_pickle = False  # Make sure that the settings below match those of your pickle instance.
+    use_pickle = True  # Make sure that the settings below match those of your pickle instance.
 
     data_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'data')
     save_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'results')
@@ -48,25 +48,23 @@ def main():
     elif use_pickle:
         result = load_pickle(os.path.join(save_path, 'result.pickle'))
         result.model.group_name = 'Region'
-        model = result.model
     else:
         model = SSMS(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
         result = model.fit(maxiter=100000, maxfun=100000000, cov_type='oim')
         result.save(os.path.join(save_path, 'result.pickle'))
 
     if not model_select:
-        extended_filtered_result = prepare_forecast(result, data)
-        smoothed_result = model.smooth(result.params, return_ssm=1)
+        new_model, extended_filtered_result = prepare_forecast(result, data)
+        smoothed_result = new_model.smooth(extended_filtered_result.params, return_ssm=1)
 
-        group_names = result.model.group_names
-        plot_states(result, result, group_names, z_names, save_path)
-        plot_states(result, smoothed_result, group_names, z_names, save_path)
-        forecast_error(extended_filtered_result, group_names, save_path, 153, 190, 1,
-                       'one_step_ahead_forecast')  # forecast_error(result, group_names, save_path, 10, 152, 0,
-        # 'in_sample_prediction', n_plots=8)
+        group_names = extended_filtered_result.model.group_names
+        plot_states(extended_filtered_result, extended_filtered_result, group_names, z_names, save_path)
+        plot_states(extended_filtered_result, smoothed_result, group_names, z_names, save_path)
+        forecast_error(extended_filtered_result, group_names, save_path, 153, 190, 1, 'one_step_ahead_forecast')
+        # print_results(result, save_path, 'result')
 
     end_time = time.time()
-    print("Total runtime:", (end_time - start_time), sep=' ')
+    print(f'Total runtime: {round((end_time - start_time)/60, 1)} minute(s)')
 
 
 def model_selection(data):

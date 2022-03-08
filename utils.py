@@ -35,12 +35,12 @@ def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherR
     if isinstance(smoothed_results, MLEResultsWrapper):
         states = np.transpose(filtered_results.filtered_state)
         cis = np.zeros((states.shape[0], n_betas * 3))
+        # We use the state_cov (covariance matrix of state equation Q) to calculate the ci's
         bound = 1.96 * np.sqrt(filtered_results.params[n_regions * 3:])
     else:
         states = np.transpose(smoothed_results.smoothed_state)
         cis = np.zeros((states.shape[0], n_betas * 3))
-        # Parameters (including the parameters for state variances) are the same for filtered states and
-        # smoothed states
+        # We use the state_cov (covariance matrix of state equation Q) to calculate the ci's
         bound = 1.96 * np.sqrt(filtered_results.params[n_regions * 3:])
     for i in range(n_betas):
         cis[:, i] = states[:, n_regions * 2 + i] - bound[i]
@@ -75,30 +75,34 @@ def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherR
     states_df = states_df.iloc[5:, :]
     # Important events are the first intelligent lockdown and relaxation of rules
     events = [datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')]
+    events_full = [*events, *[datetime.datetime.strptime('2020-51-1', '%G-%V-%u'),
+                              datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]]
     for i in range(n_betas):
-        if i == z_names.index('StringencyIndex'):
+        if i == z_names.index('StringencyIndex') and isinstance(smoothed_results, MLEResultsWrapper):
             # Remove 0-values when plotting StringencyIndex
-            states_df = states_df[108:]
-        p = ggplot(states_df, aes(x='Date')) + scale_x_datetime(breaks=get_ticks(states_df, 8)[0],
-                                                                labels=get_ticks(states_df, 8)[1]) + geom_ribbon(
-            aes(ymin=states_df.iloc[:, n_regions * 2 + n_betas + i],
-                ymax=states_df.iloc[:, n_regions * 2 + n_betas * 2 + i], color='"95% CI"'), alpha=0.1) + geom_line(
-            aes(y=states_df.columns[n_regions * 2 + i], color='"State"')) + geom_vline(xintercept=events,
-                                                                                       linetype="dotted") + \
-            scale_color_manual(
-            values=['#dedede', '#4472c4']) + labs(x='Date', y='State', color='Legend')
-        # print(p)
+            states_df_02 = states_df[108:]
+        else:
+            states_df_02 = states_df
+        p = ggplot(states_df_02, aes(x='Date')) \
+            + scale_x_datetime(breaks=get_ticks(states_df_02, 8)[0], labels=get_ticks(states_df_02, 8)[1]) \
+            + geom_ribbon(aes(ymin=states_df_02.iloc[:, n_regions * 2 + n_betas + i],
+                              ymax=states_df_02.iloc[:, n_regions * 2 + n_betas * 2 + i], color='"95% CI"'), alpha=0.1) \
+            + geom_line(aes(y=states_df_02.columns[n_regions * 2 + i], color='"State"')) + geom_vline(
+            xintercept=events_full, linetype="dotted") \
+            + geom_vline(xintercept=[datetime.datetime.strptime('2020-50-1', '%G-%V-%u')], linetype="solid") \
+            + scale_color_manual(values=['#dedede', '#4472c4']) + labs(x='Date', y='State', color='Legend')
         if isinstance(smoothed_results, MLEResultsWrapper):
             ggsave(plot=p, filename='coefficient_for_filtered_' + z_names[i], path=save_path, verbose=False, dpi=600)
         else:
             ggsave(plot=p, filename='coefficient_for_smoothed_' + z_names[i], path=save_path, verbose=False, dpi=600)
+        # print(p)
 
 
 def forecast_error(results: MLEResults, regions: list, save_path: str, first=int, last=int, ci=bool, tp=str,
-                   n_plots=20):
+                   n_plots=4):
     """
     Computes forecast error with one-step ahead forecasts for each region and saves it in save_path.
-    Plots SalesGoodsEUR with tp for regions indices specified in plot_regions and saves it in save_path.
+    Plots forecasts, actual sales and errors of the n_plots best/worst MASE/MdASE regions
 
     :param results: (extended) results (from prepare_forecast())
     :param regions: list of region names,
@@ -108,9 +112,10 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
     :param last: this time index should exactly be equal to the time index-1 where the sample of the model ends
     :param ci: whether to plot a confidence interval (True) or not (False),
     if the CI's become too big set ci=False otherwise the sales will be plotted as straight lines
-    :param tp: specify the type of data (e.g. in_sample_prediction or one_step_ahead_forecast) you want to plot,
-    use _ instead of spaces in for tp, since the name of the plots/excel files will also have this name
-    :param n_plots: the number of plots to save, default is 20 plots (5 best + 5 worst forecasts + 10 actual sales)
+    :param tp: specify the type of data (e.g. one_step_ahead_forecast) you want to plot,
+    use _ instead of spaces for tp, since the name of the plots/excel files will also have this name
+    :param n_plots: the number of regions to plot, 4 (default) implies plotting the forecasts, actual sales
+    and errors of the 4 best/worst MASE/MdASE regions (= 3 * 4 * 2 * 2 = 48 plots)
     :return:
     """
 
@@ -122,31 +127,35 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
     mases = np.zeros(len(regions))
     maes = np.zeros((38, len(regions)))
     maes_naive = np.zeros((152, len(regions)))
+    mdases = np.zeros(len(regions))
     for region in range(len(regions)):
         maes[:, region] = np.abs(model.endog[first:, region] - data.predicted_mean[:, region])
         maes_naive[:, region] = np.abs(
             [x - model.endog[0:153, region][i - 1] for i, x in enumerate(model.endog[0:153, region])][1:])
         mases[region] = np.mean(maes[:, region]) / np.mean(maes_naive[:, region])
+        mdases[region] = np.median(maes[:, region]) / np.median(maes_naive[:, region])
     mean_mase = np.mean(mases)
     med_mase = np.median(mases)
-    l1 = sum(x < 1 for x in mases) / mases.shape[0]
+    mean_mdase = np.mean(mdases)
+    med_mdase = np.median(mdases)
+    l1_mase = sum(x < 1 for x in mases) / mases.shape[0]
+    l1_mdase = sum(x < 1 for x in mdases) / mdases.shape[0]
 
-    best, worst = np.argmin(mases), np.argmax(mases)
+    best_mase, worst_mase = np.argmin(mases), np.argmax(mases)
+    best_mdase, worst_mdase = np.argmin(mdases), np.argmax(mdases)
     mase_df = pd.DataFrame(np.transpose(mases.reshape(1, n_regions)), index=regions, columns=['MASE'])
-    mase_df[''] = ''
-    mase_df['Best'] = [regions[best], mases[best]] + [''] * (len(mase_df) - 2)
-    mase_df['Worst'] = [regions[worst], mases[worst]] + [''] * (len(mase_df) - 2)
-    mase_df['Mean'] = [mean_mase] + [''] * (len(mase_df) - 1)
-    mase_df['Median'] = [med_mase] + [''] * (len(mase_df) - 1)
-    mase_df['Proportion of regions <1'] = [l1] + [''] * (len(mase_df) - 1)
-    mase_df.to_excel(os.path.join(save_path, 'mases_' + tp + '.xlsx'))
-    print(f'{tp}s starting from t={first}')
-    print(f'Average MASE of regions : {mean_mase}')
-    print(f'Median MASE of regions : {med_mase}')
-    print(f'Proportion of regions with a MASE < 1: {l1}')
-    print(f'Region with smallest MASE: {regions[best]}, {mases[best]}')
-    print(f'Region with largest MASE: {regions[worst]}, {mases[worst]}')
-    print()
+    mdase_df = pd.DataFrame(np.transpose(mdases.reshape(1, n_regions)), index=regions, columns=['MdASE'])
+    error_df = mase_df.merge(mdase_df, left_index=True, right_index=True, how='left')
+    error_df[''] = ''
+    error_df['Best MASE'] = [regions[best_mase], mases[best_mase], '', 'Best MdASE', regions[best_mdase],
+                             mdases[best_mdase]] + [''] * (len(error_df) - 6)
+    error_df['Worst MASE'] = [regions[worst_mase], mases[worst_mase], '', 'Worst MdASE', regions[worst_mdase],
+                              mdases[worst_mdase]] + [''] * (len(error_df) - 6)
+    error_df['Mean MASE'] = [mean_mase] + [''] * 2 + ['Mean MdASE', mean_mdase] + [''] * (len(error_df) - 5)
+    error_df['Median MASE'] = [med_mase] + [''] * 2 + ['Median MdASE', med_mdase] + [''] * (len(error_df) - 5)
+    error_df['Proportion of regions MASE<1'] = [l1_mase] + [''] * 2 + ['Proportion of regions MdASE<1', l1_mdase] \
+                                               + [''] * (len(error_df) - 5)
+    error_df.to_excel(os.path.join(save_path, 'errors_' + tp + '.xlsx'))
 
     # Plot forecasts (df_pred), actual sales (df_full) and MAE/MAE_naive (df_mae)
     df_pred = pd.DataFrame(np.concatenate((model.endog[first:, :], data.predicted_mean, data.conf_int()), axis=1))
@@ -159,8 +168,8 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
     df_mae = pd.DataFrame(np.concatenate((maes_naive, maes), axis=0))
     df_mae['Date'] = pd.date_range(start=datetime.datetime(2018, 1, 8), periods=len(df_mae), freq='W')
 
-    plot_regions = np.concatenate((mases.argsort()[:int(n_plots / 4)], mases.argsort()[-int(n_plots / 4):][::-1]),
-                                  axis=0)
+    plot_regions = np.concatenate((mases.argsort()[:n_plots], mases.argsort()[-n_plots:][::-1],
+                                   mdases.argsort()[:n_plots], mdases.argsort()[-n_plots:][::-1]), axis=0)
     # Important events are the second lockdown and relaxation of (almost all) rules
     events_test = [datetime.datetime.strptime('2020-51-1', '%G-%V-%u'),
                    datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]
@@ -185,9 +194,9 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
                 linetype="solid") + scale_color_manual(values=['#4472c4']) + labs(x='Date', y='Sales', color='Legend')
             m = ggplot(df_mae, aes(x='Date')) + scale_x_datetime(breaks=get_ticks(df_mae, 8)[0],
                                                                  labels=get_ticks(df_mae, 8)[1]) + geom_line(
-                aes(y=df_mae.iloc[0:152, plot_regions[i]], color='"MAE_naive"'),
+                aes(y=df_mae.iloc[0:152, plot_regions[i]], color='"AE_naive"'),
                 data=df_mae['Date'][0:152].to_frame()) + geom_line(
-                aes(y=df_mae.iloc[151:190, plot_regions[i]], color='"MAE"'),
+                aes(y=df_mae.iloc[151:190, plot_regions[i]], color='"AE"'),
                 data=df_mae['Date'][151:190].to_frame()) + geom_vline(xintercept=events_full,
                                                                       linetype="dotted") + geom_vline(
                 xintercept=[datetime.datetime.strptime('2020-50-1', '%G-%V-%u')],
@@ -200,20 +209,39 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
                 aes(y=df_pred.iloc[:, n_regions + plot_regions[i]], color='"Forecast"')) + geom_vline(
                 xintercept=events_test, linetype="dotted") + labs(x='Date', y='Sales')
         # print(m)
-        if i < plot_regions.shape[0] / 2:
-            ggsave(plot=p, filename=tp + '_best_' + str(i + 1) + '_' + regions[plot_regions[i]], path=save_path,
-                   verbose=False, dpi=600)
-            ggsave(plot=q, filename='actual_sales_best_' + str(i + 1) + '_' + regions[plot_regions[i]], path=save_path,
-                   verbose=False, dpi=600)
+        if i < n_plots:
+            ggsave(plot=p, filename=tp + '_mase_best_' + str(i + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+            ggsave(plot=q, filename='actual_sales_mase_best_' + str(i + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
             ggsave(plot=m, filename='mase_best_' + str(i + 1) + '_' + regions[plot_regions[i]], path=save_path,
                    verbose=False, dpi=600)
+        elif i < n_plots * 2:
+            ggsave(plot=p,
+                   filename=tp + '_mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+            ggsave(plot=q, filename='actual_sales_mase_worst_' + str(i - n_plots + 1) + '_' + regions[
+                plot_regions[i]], path=save_path, verbose=False, dpi=600)
+            ggsave(plot=m,
+                   filename='mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+        elif i < n_plots * 3:
+            ggsave(plot=p,
+                   filename=tp + '_mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+            ggsave(plot=q,
+                   filename='actual_sales_mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+            ggsave(plot=m, filename='mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
         else:
-            ggsave(plot=p, filename=tp + '_worst_' + str(int(i - plot_regions.shape[0] / 2 + 1)) + '_' + regions[
+            ggsave(plot=p, filename=tp + '_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[
                 plot_regions[i]], path=save_path, verbose=False, dpi=600)
-            ggsave(plot=q, filename='actual_sales_worst_' + str(int(i - plot_regions.shape[0] / 2 + 1)) + '_' + regions[
+            ggsave(plot=q, filename='actual_sales_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[
                 plot_regions[i]], path=save_path, verbose=False, dpi=600)
-            ggsave(plot=m, filename='mase_worst_' + str(int(i - plot_regions.shape[0] / 2 + 1)) + '_' + regions[
-                plot_regions[i]], path=save_path, verbose=False, dpi=600)
+            ggsave(plot=m,
+                   filename='mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
 
 
 def get_ticks(data: pd.DataFrame, n_ticks: int):
@@ -352,12 +380,12 @@ def prepare_forecast(results: MLEResults, data: pd.DataFrame):
     """
 
     model = results.model
-    if not isinstance(model):
-        print("Can't prepare forecasts for a non-SSMS model.")
-        return
+    # if not isinstance(model):
+    #     print("Can't prepare forecasts for a non-SSMS model.")
+    #     return
 
     new_model = SSMS(data, group_name=model.group_name, y_name=model.y_name, z_names=model.z_names,
                      cov_rest=model.cov_rest)
     fitted_params = results.params
     new_result = new_model.filter(fitted_params)
-    return new_result
+    return new_model, new_result

@@ -56,6 +56,7 @@ def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
         data['index'] = data.index
         data['index'] = pd.to_datetime(data['index'] + '1', format='%Y%W%w')
 
+        print('Region (YearWeek): outlier value, deviation from moving average')
         for i in enumerate(outliers):
             region_index = i[0]
             data_info.append([region_index, group_names[region_index]])
@@ -75,12 +76,12 @@ def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
 
                 for j in outliers[region_index][0]:
 
-                    # Outliers have to be consecutive, check printed dates (and outlier value/size)!
+                    # Outliers have to be consecutive, check printed dates (and outlier value/deviation percentage)!
                     if outliers[region_index][0].size > 0:
-                        outlier_value = ma_data[region_index][0][j]
-                        outlier_size = abs(ma_data[region_index][0][j] - ma_data[region_index][1][j])
+                        outlier_value = math.exp(ma_data[region_index][0][j])
+                        outlier_dev = int(((math.exp(ma_data[region_index][0][j]) - math.exp(ma_data[region_index][1][j])) / math.exp(ma_data[region_index][1][j])) * 100)
                         print(
-                            f'{group_names[region_index]} ({get_date(data, int(j))}): {outlier_value}, {outlier_size}')
+                            f'{group_names[region_index]} ({get_date(data, int(j))}): {outlier_value}, {outlier_dev}%')
                     data.loc[(data.index == get_date(data, int(j))) & (
                         data['Region'].str.contains(group_names[region_index])), 'SalesGoodsEUR'] = new_sales
                 print()
