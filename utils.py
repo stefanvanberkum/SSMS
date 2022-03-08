@@ -78,7 +78,7 @@ def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherR
     events_full = [*events, *[datetime.datetime.strptime('2020-51-1', '%G-%V-%u'),
                               datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]]
     for i in range(n_betas):
-        if i == z_names.index('StringencyIndex') and isinstance(smoothed_results, MLEResultsWrapper):
+        if i == z_names.index('StringencyIndex'):
             # Remove 0-values when plotting StringencyIndex
             states_df_02 = states_df[108:]
         else:
