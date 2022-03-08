@@ -10,7 +10,7 @@ from statsmodels.iolib.smpickle import load_pickle
 
 from data_loader import load_data
 from state_space import SSMS
-from utils import forecast_error, plot_states, prepare_forecast, print_results
+from utils import forecast_error, plot_states, prepare_forecast
 
 
 def main():
@@ -60,11 +60,11 @@ def main():
         group_names = extended_filtered_result.model.group_names
         plot_states(extended_filtered_result, extended_filtered_result, group_names, z_names, save_path)
         plot_states(extended_filtered_result, smoothed_result, group_names, z_names, save_path)
-        forecast_error(extended_filtered_result, group_names, save_path, 153, 190, 1, 'one_step_ahead_forecast')
-        # print_results(result, save_path, 'result')
+        forecast_error(extended_filtered_result, group_names, save_path, 153, 190, 1,
+                       'one_step_ahead_forecast')  # print_results(result, save_path, 'result')
 
     end_time = time.time()
-    print(f'Total runtime: {round((end_time - start_time)/60, 1)} minute(s)')
+    print(f'Total runtime: {round((end_time - start_time) / 60, 1)} minute(s)')
 
 
 def model_selection(data):
