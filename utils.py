@@ -88,8 +88,9 @@ def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherR
             aes(ymin=states_df_02.iloc[:, n_regions * 2 + n_betas + i],
                 ymax=states_df_02.iloc[:, n_regions * 2 + n_betas * 2 + i], color='"95% CI"'), alpha=0.1) + geom_line(
             aes(y=states_df_02.columns[n_regions * 2 + i], color='"State"')) + geom_vline(xintercept=events_full,
-            linetype="dotted") + geom_vline(xintercept=[datetime.datetime.strptime('2020-50-1', '%G-%V-%u')],
-                                            linetype="solid") + scale_color_manual(
+                                                                                          linetype="dotted") + \
+            geom_vline(
+            xintercept=[datetime.datetime.strptime('2020-50-1', '%G-%V-%u')], linetype="solid") + scale_color_manual(
             values=['#dedede', '#4472c4']) + labs(x='Date', y='State', color='Legend')
         if isinstance(smoothed_results, MLEResultsWrapper):
             ggsave(plot=p, filename='coefficient_for_filtered_' + z_names[i], path=save_path, verbose=False, dpi=600)
