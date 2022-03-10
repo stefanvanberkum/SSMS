@@ -195,10 +195,10 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
                 linetype="solid") + scale_color_manual(values=['#4472c4']) + labs(x='Date', y='Sales', color='Legend')
             m = ggplot(df_mae, aes(x='Date')) + scale_x_datetime(breaks=get_ticks(df_mae, 8)[0],
                                                                  labels=get_ticks(df_mae, 8)[1]) + geom_line(
-                aes(y=df_mae.iloc[0:152, plot_regions[i]], color='"AE_naive"'),
-                data=df_mae['Date'][0:152].to_frame()) + geom_line(
-                aes(y=df_mae.iloc[151:190, plot_regions[i]], color='"AE"'),
-                data=df_mae['Date'][151:190].to_frame()) + geom_vline(xintercept=events_full,
+                aes(y=df_mae.iloc[0:153, plot_regions[i]], color='"AE_naive"'),
+                data=df_mae['Date'][0:153].to_frame()) + geom_line(
+                aes(y=df_mae.iloc[152:190, plot_regions[i]], color='"AE"'),
+                data=df_mae['Date'][152:190].to_frame()) + geom_vline(xintercept=events_full,
                                                                       linetype="dotted") + geom_vline(
                 xintercept=[datetime.datetime.strptime('2020-50-7', '%G-%V-%u')],
                 linetype="solid") + scale_color_manual(values=['#4472c4', '#ed7d31']) + labs(x='Date', y='Error',
@@ -223,19 +223,25 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
             ggsave(plot=q, filename='actual_sales_mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
                    path=save_path, verbose=False, dpi=600)
             ggsave(plot=m, filename='mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
-                   path=save_path, verbose=False,
-                   dpi=600)  # elif i < n_plots * 3:  #     ggsave(plot=p, filename=tp + '_mdase_best_' + str(i -  #
-            # n_plots * 2 + 1) + '_' + regions[plot_regions[i]],  #            path=save_path, verbose=False,
-            # dpi=600)  #     ggsave(plot=q,  #            filename='actual_sales_mdase_best_' + str(i - n_plots * 2
-            # + 1) + '_' + regions[plot_regions[i]],  #            path=save_path, verbose=False, dpi=600)  #  #
-            # ggsave(plot=m, filename='mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
-            #            path=save_path, verbose=False, dpi=600)  # else:  #     ggsave(plot=p, filename=tp +  #
-            #            '_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],  #  #
-            #            path=save_path, verbose=False, dpi=600)  #     ggsave(plot=q,  #  #
-            #            filename='actual_sales_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[  #
-            #            plot_regions[i]],  #            path=save_path, verbose=False, dpi=600)  #     ggsave(  #
-            #            plot=m, filename='mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
-            #            path=save_path, verbose=False, dpi=600)
+                   path=save_path, verbose=False, dpi=600)
+        """
+        elif i < n_plots * 3:
+            ggsave(plot=p, filename=tp + '_mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+            ggsave(plot=q,
+                   filename='actual_sales_mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+            ggsave(plot=m, filename='mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+        else:
+            ggsave(plot=p, filename=tp + '_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+            ggsave(plot=q,
+                   filename='actual_sales_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+            ggsave(plot=m, filename='mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
+        """
 
 
 def get_ticks(data: pd.DataFrame, n_ticks: int):

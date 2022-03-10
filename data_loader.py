@@ -15,7 +15,7 @@ import pandas as pd
 
 def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
     """
-    Load the required data.
+    Load the required data and save descriptive statistics.
 
     :param filepath: the location of the files
     :param save_path: save path for plots
@@ -80,7 +80,9 @@ def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
                     # Outliers have to be consecutive, check printed dates (and outlier value/deviation percentage)!
                     if outliers[region_index][0].size > 0:
                         outlier_value = math.exp(ma_data[region_index][0][j])
-                        outlier_dev = int(((math.exp(ma_data[region_index][0][j]) - math.exp(ma_data[region_index][1][j])) / math.exp(ma_data[region_index][1][j])) * 100)
+                        outlier_dev = int(((math.exp(ma_data[region_index][0][j])
+                                            - math.exp(ma_data[region_index][1][j]))
+                                           / math.exp(ma_data[region_index][1][j])) * 100)
                         print(
                             f'{group_names[region_index]} ({get_date(data, int(j))}): {outlier_value}, {outlier_dev}%')
                     data.loc[(data.index == get_date(data, int(j))) & (
@@ -106,6 +108,18 @@ def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
 
     # Drop regions that cause trouble.
     # data = data[~data['Region'].isin(['NL226_340', 'NL329_340', 'NL328_501', 'NL225_509'])]
+
+    # Calculate/save descriptive statistics of used variables
+    variables = ['StringencyIndex', 'SalesGoodsEUR', 'WVO', 'SchoolHoliday', 'TG', '0-25_nbrpromos_index_201801',
+                 '25-50_nbrpromos_index_201801', '50-75_nbrpromos_index_201801']
+    statistics = np.zeros((len(variables), 5))
+    statistics[:, 0] = round(data[variables].mean(), 3)
+    statistics[:, 1] = round(data[variables].median(), 3)
+    statistics[:, 2] = round(data[variables].std(), 3)
+    statistics[:, 3] = round(data[variables].min(), 3)
+    statistics[:, 4] = round(data[variables].max(), 3)
+    statistics_df = pd.DataFrame(statistics, index=variables, columns=['Mean', 'Median', 'Std', 'Min', 'Max'])
+    statistics_df.to_excel(os.path.join(save_path, 'descriptive_statistics.xlsx'))
     return data
 
 
@@ -270,9 +284,10 @@ def load_turnover(filepath: str):
 
 def load_tracker(filepath: str, save_path: str):
     """
-    Loads the tracker data.
+    Loads the tracker data and saves plot of tracker data.
 
     :param filepath: the location of the tracker file
+    :param save_path: save path for plot
     :return: formatted data
     """
 
@@ -313,8 +328,8 @@ def load_tracker(filepath: str, save_path: str):
     tracker_weekly = tracker_weekly[:-2]
     tracker_weekly['Date'] = pd.date_range(start='1/7/2018', periods=len(tracker_weekly), freq='W')
     # Important events are the 1st/2nd lockdown and relaxations of (almost all) rules
-    events = [datetime.datetime.strptime('2020-11-7', '%G-%V-%u'), datetime.datetime.strptime('2020-27-7', '%G-%V-%u')
-        , datetime.datetime.strptime('2020-51-7', '%G-%V-%u'), datetime.datetime.strptime('2021-25-7', '%G-%V-%u')]
+    events = [datetime.datetime.strptime('2020-11-7', '%G-%V-%u'), datetime.datetime.strptime('2020-27-7', '%G-%V-%u'),
+              datetime.datetime.strptime('2020-51-7', '%G-%V-%u'), datetime.datetime.strptime('2021-25-7', '%G-%V-%u')]
     p = ggplot(tracker_weekly[112:], aes(x='Date', y='StringencyIndex')) \
         + scale_x_datetime(breaks=get_ticks(tracker_weekly[112:], 8)[0], labels=get_ticks(tracker_weekly[112:], 8)[1]) \
         + geom_line() \
@@ -348,7 +363,7 @@ def load_temperature(filepath: str):
     temperature_data.columns = header
     temperature_data.columns.name = None
 
-    # Index by date and remove data before 2018-1-1.
+    # Index by date and remove data after 2018-1-1.
     temperature_data['YYYYMMDD'] = pd.to_datetime(temperature_data['YYYYMMDD'], format='%Y%m%d')
     temperature_data = temperature_data[temperature_data['YYYYMMDD'] < '2018-01-01']
 
