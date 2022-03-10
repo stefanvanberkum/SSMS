@@ -20,8 +20,8 @@ def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherR
     Plots states (all variables specified in z_names) and saves it in save_path.
     The dataframe states contains all the states (mu, nu, z_names) over time.
 
-    :param filtered_results: filtered results from a SSMS class
-    :param smoothed_results: smoothed results from a SSMS class, smoothed results should be an MLEResultsWrapper
+    :param filtered_results: filtered results from a SSMS_alt_4 class
+    :param smoothed_results: smoothed results from a SSMS_alt_4 class, smoothed results should be an MLEResultsWrapper
     if you don't wanted smoothed states
     :param regions: list of region names
     :param z_names: a list of column names of the independent variables to be placed in the Z (design) matrix
@@ -76,29 +76,30 @@ def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherR
     # Important events are the first intelligent lockdown and relaxation of rules
     events = [datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')]
     events_full = [*events, *[datetime.datetime.strptime('2020-51-1', '%G-%V-%u'),
-                              datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]]
+                              datetime.datetime.strptime('2021-25-1', '%G-%V-%u')]]
     for i in range(n_betas):
         if i == z_names.index('StringencyIndex'):
             # Remove 0-values when plotting StringencyIndex
             states_df_02 = states_df[108:]
         else:
             states_df_02 = states_df
-        p = ggplot(states_df_02, aes(x='Date')) + scale_x_datetime(breaks=get_ticks(states_df_02, 8)[0],
-                                                                   labels=get_ticks(states_df_02, 8)[1]) + geom_ribbon(
-            aes(ymin=states_df_02.iloc[:, n_regions * 2 + n_betas + i],
-                ymax=states_df_02.iloc[:, n_regions * 2 + n_betas * 2 + i], color='"95% CI"'), alpha=0.1) + geom_line(
-            aes(y=states_df_02.columns[n_regions * 2 + i], color='"State"')) + geom_vline(xintercept=events_full,
-            linetype="dotted") + geom_vline(xintercept=[datetime.datetime.strptime('2020-50-1', '%G-%V-%u')],
-                                            linetype="solid") + scale_color_manual(
-            values=['#dedede', '#4472c4']) + labs(x='Date', y='State', color='Legend')
+        p = ggplot(states_df_02, aes(x='Date')) \
+            + scale_x_datetime(breaks=get_ticks(states_df_02, 8)[0], labels=get_ticks(states_df_02, 8)[1]) \
+            + geom_ribbon(aes(ymin=states_df_02.iloc[:, n_regions * 2 + n_betas + i],
+                              ymax=states_df_02.iloc[:, n_regions * 2 + n_betas * 2 + i], color='"95% CI"'), alpha=0.1) \
+            + geom_line(aes(y=states_df_02.columns[n_regions * 2 + i], color='"State"')) + geom_vline(
+            xintercept=events_full, linetype="dotted") \
+            + geom_vline(xintercept=[datetime.datetime.strptime('2020-50-1', '%G-%V-%u')], linetype="solid") \
+            + scale_color_manual(values=['#dedede', '#4472c4']) + labs(x='Date', y='State', color='Legend')
         if isinstance(smoothed_results, MLEResultsWrapper):
             ggsave(plot=p, filename='coefficient_for_filtered_' + z_names[i], path=save_path, verbose=False, dpi=600)
         else:
-            ggsave(plot=p, filename='coefficient_for_smoothed_' + z_names[i], path=save_path, verbose=False,
-                   dpi=600)  # print(p)
+            ggsave(plot=p, filename='coefficient_for_smoothed_' + z_names[i], path=save_path, verbose=False, dpi=600)
+        # print(p)
 
 
-def forecast_error(results: MLEResults, regions: list, save_path: str, first=int, last=int, ci=bool, tp=str, n_plots=4):
+def forecast_error(results: MLEResults, regions: list, save_path: str, first=int, last=int, ci=bool, tp=str,
+                   n_plots=4):
     """
     Computes forecast error with one-step ahead forecasts for each region and saves it in save_path.
     Plots forecasts, actual sales and errors of the n_plots best/worst MASE/MdASE regions
@@ -152,8 +153,8 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
                               mdases[worst_mdase]] + [''] * (len(error_df) - 6)
     error_df['Mean MASE'] = [mean_mase] + [''] * 2 + ['Mean MdASE', mean_mdase] + [''] * (len(error_df) - 5)
     error_df['Median MASE'] = [med_mase] + [''] * 2 + ['Median MdASE', med_mdase] + [''] * (len(error_df) - 5)
-    error_df['Proportion of regions MASE<1'] = [l1_mase] + [''] * 2 + ['Proportion of regions MdASE<1', l1_mdase] + [
-        ''] * (len(error_df) - 5)
+    error_df['Proportion of regions MASE<1'] = [l1_mase] + [''] * 2 + ['Proportion of regions MdASE<1', l1_mdase] \
+                                               + [''] * (len(error_df) - 5)
     error_df.to_excel(os.path.join(save_path, 'errors_' + tp + '.xlsx'))
 
     # Plot forecasts (df_pred), actual sales (df_full) and MAE/MAE_naive (df_mae)
@@ -171,7 +172,7 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
                                    mdases.argsort()[:n_plots], mdases.argsort()[-n_plots:][::-1]), axis=0)
     # Important events are the second lockdown and relaxation of (almost all) rules
     events_test = [datetime.datetime.strptime('2020-51-1', '%G-%V-%u'),
-                   datetime.datetime.strptime('2021-24-1', '%G-%V-%u')]
+                   datetime.datetime.strptime('2021-25-1', '%G-%V-%u')]
     events_full = [
         *[datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')],
         *events_test]
@@ -209,21 +210,24 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
                 xintercept=events_test, linetype="dotted") + labs(x='Date', y='Sales')
         # print(m)
         if i < n_plots:
-            ggsave(plot=p, filename=tp + '_mase_best_' + str(i + 1) + '_' + regions[plot_regions[i]], path=save_path,
-                   verbose=False, dpi=600)
+            ggsave(plot=p, filename=tp + '_mase_best_' + str(i + 1) + '_' + regions[plot_regions[i]],
+                   path=save_path, verbose=False, dpi=600)
             ggsave(plot=q, filename='actual_sales_mase_best_' + str(i + 1) + '_' + regions[plot_regions[i]],
                    path=save_path, verbose=False, dpi=600)
             ggsave(plot=m, filename='mase_best_' + str(i + 1) + '_' + regions[plot_regions[i]], path=save_path,
                    verbose=False, dpi=600)
         elif i < n_plots * 2:
-            ggsave(plot=p, filename=tp + '_mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
+            ggsave(plot=p,
+                   filename=tp + '_mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
                    path=save_path, verbose=False, dpi=600)
-            ggsave(plot=q, filename='actual_sales_mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
-                   path=save_path, verbose=False, dpi=600)
-            ggsave(plot=m, filename='mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
+            ggsave(plot=q, filename='actual_sales_mase_worst_' + str(i - n_plots + 1) + '_' + regions[
+                plot_regions[i]], path=save_path, verbose=False, dpi=600)
+            ggsave(plot=m,
+                   filename='mase_worst_' + str(i - n_plots + 1) + '_' + regions[plot_regions[i]],
                    path=save_path, verbose=False, dpi=600)
         elif i < n_plots * 3:
-            ggsave(plot=p, filename=tp + '_mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
+            ggsave(plot=p,
+                   filename=tp + '_mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
                    path=save_path, verbose=False, dpi=600)
             ggsave(plot=q,
                    filename='actual_sales_mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
@@ -231,12 +235,12 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
             ggsave(plot=m, filename='mdase_best_' + str(i - n_plots * 2 + 1) + '_' + regions[plot_regions[i]],
                    path=save_path, verbose=False, dpi=600)
         else:
-            ggsave(plot=p, filename=tp + '_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
-                   path=save_path, verbose=False, dpi=600)
-            ggsave(plot=q,
-                   filename='actual_sales_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
-                   path=save_path, verbose=False, dpi=600)
-            ggsave(plot=m, filename='mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
+            ggsave(plot=p, filename=tp + '_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[
+                plot_regions[i]], path=save_path, verbose=False, dpi=600)
+            ggsave(plot=q, filename='actual_sales_mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[
+                plot_regions[i]], path=save_path, verbose=False, dpi=600)
+            ggsave(plot=m,
+                   filename='mdase_worst_' + str(i - n_plots * 3 + 1) + '_' + regions[plot_regions[i]],
                    path=save_path, verbose=False, dpi=600)
 
 
