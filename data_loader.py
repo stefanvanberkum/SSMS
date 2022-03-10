@@ -363,7 +363,7 @@ def load_temperature(filepath: str):
     temperature_data.columns = header
     temperature_data.columns.name = None
 
-    # Index by date and remove data after 2018-1-1.
+    # Index by date and remove data after 2017-12-31.
     temperature_data['YYYYMMDD'] = pd.to_datetime(temperature_data['YYYYMMDD'], format='%Y%m%d')
     temperature_data = temperature_data[temperature_data['YYYYMMDD'] < '2018-01-01']
 
