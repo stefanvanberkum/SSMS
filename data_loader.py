@@ -54,7 +54,8 @@ def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
     if drop_outliers:
         ma_data, group_names, outliers = get_outliers(data, threshold)
         data['index'] = data.index
-        data['index'] = pd.to_datetime(data['index'] + '1', format='%Y%W%w')
+        # Day 0 equals sunday
+        data['index'] = pd.to_datetime(data['index'] + '0', format='%Y%W%w')
 
         print('Region (YearWeek): outlier value, deviation from moving average')
         for i in enumerate(outliers):
@@ -310,10 +311,10 @@ def load_tracker(filepath: str, save_path: str):
 
     # Drop last two empty rows
     tracker_weekly = tracker_weekly[:-2]
-    tracker_weekly['Date'] = pd.date_range(start='1/1/2018', periods=len(tracker_weekly), freq='W')
+    tracker_weekly['Date'] = pd.date_range(start='1/7/2018', periods=len(tracker_weekly), freq='W')
     # Important events are the 1st/2nd lockdown and relaxations of (almost all) rules
-    events = [datetime.datetime.strptime('2020-11-1', '%G-%V-%u'), datetime.datetime.strptime('2020-27-1', '%G-%V-%u')
-        , datetime.datetime.strptime('2020-51-1', '%G-%V-%u'), datetime.datetime.strptime('2021-25-1', '%G-%V-%u')]
+    events = [datetime.datetime.strptime('2020-11-7', '%G-%V-%u'), datetime.datetime.strptime('2020-27-7', '%G-%V-%u')
+        , datetime.datetime.strptime('2020-51-7', '%G-%V-%u'), datetime.datetime.strptime('2021-25-7', '%G-%V-%u')]
     p = ggplot(tracker_weekly[112:], aes(x='Date', y='StringencyIndex')) \
         + scale_x_datetime(breaks=get_ticks(tracker_weekly[112:], 8)[0], labels=get_ticks(tracker_weekly[112:], 8)[1]) \
         + geom_line() \
