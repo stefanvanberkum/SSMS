@@ -101,8 +101,8 @@ def plot_states(filtered_results: MLEResultsWrapper, smoothed_results: SmootherR
 
 def forecast_error(results: MLEResults, regions: list, save_path: str, first=int, last=int, ci=bool, tp=str, n_plots=4):
     """
-    Computes forecast error with one-step ahead forecasts for each region and saves it in save_path.
-    Plots forecasts, actual sales and errors of the n_plots best/worst MASE/MdASE regions (only MASE plots are saved)
+    Computes forecast error with one-step ahead forecasts for each region and saves it in save_path. Moreover, plots
+    forecasts, actual sales and errors of the n_plots best/worst MASE/MdASE regions (only MASE plots are saved).
 
     :param results: (extended) results (from prepare_forecast())
     :param regions: list of region names,
@@ -246,7 +246,7 @@ def forecast_error(results: MLEResults, regions: list, save_path: str, first=int
 
 def get_ticks(data: pd.DataFrame, n_ticks: int):
     """
-    Returns x_axis ticks as dates
+    Returns x_axis ticks as dates,
 
     :param data: dataframe where the last column should contain pandas.Timestamp objects
     :param n_ticks: number of ticks
@@ -336,6 +336,7 @@ def print_results(results: MLEResults, save_path: str, name: str):
 def plot_variables(data: list, info: list, all_regions: False):
     """
     Plots variables.
+
     :param data: list of form [y, mu, threshold, obs_sd]
     :param info: list of from [index, name]
     :param all_regions: boolean to plot regions 1-by-1 (True) or all at the same time (False)
@@ -380,9 +381,9 @@ def prepare_forecast(results: MLEResults, data: pd.DataFrame):
     """
 
     model = results.model
-    # if not isinstance(model):
-    #     print("Can't prepare forecasts for a non-SSMS model.")
-    #     return
+    if not isinstance(model, SSMS):
+        print("Can't prepare forecasts for a non-SSMS model.")
+        return
 
     new_model = SSMS(data, group_name=model.group_name, y_name=model.y_name, z_names=model.z_names,
                      cov_rest=model.cov_rest)

@@ -6,11 +6,12 @@ import datetime
 import math
 import os
 from datetime import date
-from plotnine import *
-from utils import get_ticks
 
 import numpy as np
 import pandas as pd
+from plotnine import *
+
+from utils import get_ticks
 
 
 def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
@@ -80,9 +81,8 @@ def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
                     # Outliers have to be consecutive, check printed dates (and outlier value/deviation percentage)!
                     if outliers[region_index][0].size > 0:
                         outlier_value = math.exp(ma_data[region_index][0][j])
-                        outlier_dev = int(((math.exp(ma_data[region_index][0][j])
-                                            - math.exp(ma_data[region_index][1][j]))
-                                           / math.exp(ma_data[region_index][1][j])) * 100)
+                        outlier_dev = int(((math.exp(ma_data[region_index][0][j]) - math.exp(
+                            ma_data[region_index][1][j])) / math.exp(ma_data[region_index][1][j])) * 100)
                         print(
                             f'{group_names[region_index]} ({get_date(data, int(j))}): {outlier_value}, {outlier_dev}%')
                     data.loc[(data.index == get_date(data, int(j))) & (
@@ -106,9 +106,6 @@ def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
         plot_variables(ma_data_01, outlier_info, 0)
         """
 
-    # Drop regions that cause trouble.
-    # data = data[~data['Region'].isin(['NL226_340', 'NL329_340', 'NL328_501', 'NL225_509'])]
-
     # Calculate/save descriptive statistics of used variables
     variables = ['StringencyIndex', 'SalesGoodsEUR', 'WVO', 'SchoolHoliday', 'TG', '0-25_nbrpromos_index_201801',
                  '25-50_nbrpromos_index_201801', '50-75_nbrpromos_index_201801']
@@ -125,12 +122,12 @@ def load_data(filepath: str, save_path: str, drop_outliers=True, threshold=10):
 
 def get_outliers(data: pd.DataFrame, threshold: int):
     """
-        Calculates moving average data (sales, moving average, standard deviation) per region and detects outliers
+        Calculates moving average data (sales, moving average, standard deviation) per region and detects outliers.
 
         :param data: data
         :param threshold: number of standard deviations away from moving average to be considered an outlier
         :return: moving average data, region names, list of outliers indices
-        """
+    """
 
     grouped = data.groupby('Region', sort=False)
     group_names = [name for name, group in grouped]
@@ -165,12 +162,12 @@ def get_outliers(data: pd.DataFrame, threshold: int):
 
 def get_date(data: pd.DataFrame, index: int):
     """
-        Transforms index into date
+    Transforms index into date
 
-        :param index: index of outlier in y_group
-        :param data: data
-        :return: yearweek value of outlier
-        """
+    :param index: index of outlier in y_group
+    :param data: data
+    :return: yearweek value of outlier
+    """
 
     dt = (data['index'].iloc[0] + datetime.timedelta(weeks=index)).strftime('%G%V')
     return dt
@@ -330,11 +327,11 @@ def load_tracker(filepath: str, save_path: str):
     # Important events are the 1st/2nd lockdown and relaxations of (almost all) rules
     events = [datetime.datetime.strptime('2020-11-7', '%G-%V-%u'), datetime.datetime.strptime('2020-27-7', '%G-%V-%u'),
               datetime.datetime.strptime('2020-51-7', '%G-%V-%u'), datetime.datetime.strptime('2021-25-7', '%G-%V-%u')]
-    p = ggplot(tracker_weekly[112:], aes(x='Date', y='StringencyIndex')) \
-        + scale_x_datetime(breaks=get_ticks(tracker_weekly[112:], 8)[0], labels=get_ticks(tracker_weekly[112:], 8)[1]) \
-        + geom_line() \
-        + geom_vline(xintercept=events, linetype="dotted") \
-        + labs(x='Date', y='StringencyIndex')
+    p = ggplot(tracker_weekly[112:], aes(x='Date', y='StringencyIndex')) + scale_x_datetime(
+        breaks=get_ticks(tracker_weekly[112:], 8)[0],
+        labels=get_ticks(tracker_weekly[112:], 8)[1]) + geom_line() + geom_vline(xintercept=events,
+                                                                                 linetype="dotted") + labs(x='Date',
+                                                                                                           y='StringencyIndex')
     ggsave(plot=p, filename='StringencyIndex', path=save_path, verbose=False, dpi=600)
     del tracker_weekly['Date']
 

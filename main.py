@@ -15,7 +15,7 @@ from utils import forecast_error, plot_states, prepare_forecast
 
 def main():
     model_select = False
-    use_pickle = True  # Make sure that the settings below match those of your pickle instance.
+    use_pickle = False  # Make sure that the settings below match those of your pickle instance.
 
     data_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'data')
     save_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'results')
@@ -23,31 +23,12 @@ def main():
     start_time = time.time()
     data = load_data(data_path, save_path)
     train_data = data[:63 * 153]
-    test_data = data[63 * 153:]
-    # regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508',
-    #            'NL414_511', 'NL332_505']
-    # regions = ['NL310_503', 'NL33C_340', 'NL33C_506', 'NL212_507', 'NL414_340', 'NL328_501', 'NL333_505', 'NL230_508']
-    # data = data[data['Region'].isin(regions)]
-    # train_data = train_data[train_data['Region'].isin(regions)]
-    # test_data = test_data[test_data['Region'].isin(regions)]
-
-    # z_names = ['WVO', 'TG', 'SchoolHoliday', '0-25_nbrpromos_index_201801', '25-50_nbrpromos_index_201801',
-    #           '50-75_nbrpromos_index_201801', 'StringencyIndex']
     z_names = ['WVO', 'StringencyIndex']
-    d_names = ['StringencyIndex']
-    c_names = ['StringencyIndexDiff']
-    var_start = 1
-    cov_start = 0
-    cov_rests = ['IDE']
-    cov_group = 'nuts3_code'
-    cov_type = 'oim'
-    alts = [False]
 
     if model_select:
         model_selection(train_data)
     elif use_pickle:
         result = load_pickle(os.path.join(save_path, 'result.pickle'))
-        result.model.group_name = 'Region'
     else:
         model = SSMS(train_data, group_name='Region', y_name='SalesGoodsEUR', z_names=z_names, cov_rest='IDE')
         result = model.fit(maxiter=100000, maxfun=100000000, cov_type='oim')
