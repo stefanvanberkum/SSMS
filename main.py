@@ -15,7 +15,7 @@ from utils import forecast_error, plot_states, prepare_forecast
 
 def main():
     model_select = False
-    use_pickle = False  # Make sure that the settings below match those of your pickle instance.
+    use_pickle = False  # Make sure that z_names matches those used in your pickle instance.
 
     data_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'data')
     save_path = os.path.join(os.path.expanduser('~'), 'Documents', 'SSMS', 'results')
