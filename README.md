@@ -5,7 +5,7 @@ State-space model for sales (SSMS).
 ## Installation
 
 - Set up a virtual environment using Python 3.9.
-- Install the requirements by running the following command in your virtual environment: ```conda install -r requirements.txt``` (or ```pip```).
+- Install the requirements by running the following command in your virtual environment: ```conda install --file requirements.txt``` (or ```pip install -r requirements.txt```).
 - You can open and edit the code in any editor, we used the PyCharm IDE: https://www.jetbrains.com/pycharm/.
 
 ## What's included?
