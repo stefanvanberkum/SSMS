@@ -1,6 +1,6 @@
 # SSMS
 
-State-Space Model for Sales (SSMS).
+State-space model for sales (SSMS).
 
 ## Set-up instructions:
 
